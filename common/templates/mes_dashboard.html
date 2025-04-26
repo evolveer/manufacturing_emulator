@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MES Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Manufacturing Emulator</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/erp">ERP</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/mes">MES</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pcs">PCS</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1>MES Dashboard</h1>
+        <p>Manufacturing Execution System</p>
+        
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Work Orders</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="work-orders-list">Loading work orders...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Machines</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="machines-list">Loading machines...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Production Schedule</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="schedule-list">Loading schedule...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Quality Checks</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="quality-list">Loading quality checks...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Fetch work orders
+        fetch('/api/mes/work-orders')
+            .then(response => response.json())
+            .then(data => {
+                const workOrdersList = document.getElementById('work-orders-list');
+                if (data.length === 0) {
+                    workOrdersList.innerHTML = '<p>No work orders found</p>';
+                    return;
+                }
+                
+                let html = '<table class="table table-striped">';
+                html += '<thead><tr><th>ID</th><th>Product</th><th>Quantity</th><th>Status</th><th>Machine</th></tr></thead>';
+                html += '<tbody>';
+                
+                data.forEach(workOrder => {
+                    html += `<tr>
+                        <td>${workOrder.id}</td>
+                        <td>${workOrder.product_name || workOrder.product_id}</td>
+                        <td>${workOrder.completed_quantity || 0} / ${workOrder.quantity}</td>
+                        <td>${workOrder.status}</td>
+                        <td>${workOrder.machine_id || 'Not assigned'}</td>
+                    </tr>`;
+                });
+                
+                html += '</tbody></table>';
+                workOrdersList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('work-orders-list').innerHTML = '<p>Error loading work orders</p>';
+                console.error('Error:', error);
+            });
+            
+        // Fetch machines
+        fetch('/api/mes/machines')
+            .then(response => response.json())
+            .then(data => {
+                const machinesList = document.getElementById('machines-list');
+                if (data.length === 0) {
+                    machinesList.innerHTML = '<p>No machines found</p>';
+                    return;
+                }
+                
+                let html = '<table class="table table-striped">';
+                html += '<thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Status</th><th>Location</th></tr></thead>';
+                html += '<tbody>';
+                
+                data.forEach(machine => {
+                    html += `<tr>
+                        <td>${machine.id}</td>
+                        <td>${machine.name}</td>
+                        <td>${machine.type}</td>
+                        <td>${machine.status}</td>
+                        <td>${machine.location || ''}</td>
+                    </tr>`;
+                });
+                
+                html += '</tbody></table>';
+                machinesList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('machines-list').innerHTML = '<p>Error loading machines</p>';
+                console.error('Error:', error);
+            });
+            
+        // Fetch schedule
+        fetch('/api/mes/schedule')
+            .then(response => response.json())
+            .then(data => {
+                const scheduleList = document.getElementById('schedule-list');
+                if (data.length === 0) {
+                    scheduleList.innerHTML = '<p>No schedule entries found</p>';
+                    return;
+                }
+                
+                let html = '<table class="table table-striped">';
+                html += '<thead><tr><th>Machine</th><th>Work Order</th><th>Start Time</th><th>End Time</th><th>Status</th></tr></thead>';
+                html += '<tbody>';
+                
+                data.forEach(entry => {
+                    const startTime = new Date(entry.start_time).toLocaleString();
+                    const endTime = new Date(entry.end_time).toLocaleString();
+                    html += `<tr>
+                        <td>${entry.machine_id}</td>
+                        <td>${entry.work_order_id}</td>
+                        <td>${startTime}</td>
+                        <td>${endTime}</td>
+                        <td>${entry.status}</td>
+                    </tr>`;
+                });
+                
+                html += '</tbody></table>';
+                scheduleList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('schedule-list').innerHTML = '<p>Error loading schedule</p>';
+                console.error('Error:', error);
+            });
+            
+        // Fetch quality checks
+        fetch('/api/mes/quality-checks')
+            .then(response => response.json())
+            .then(data => {
+                const qualityList = document.getElementById('quality-list');
+                if (data.length === 0) {
+                    qualityList.innerHTML = '<p>No quality checks found</p>';
+                    return;
+                }
+                
+                let html = '<table class="table table-striped">';
+                html += '<thead><tr><th>ID</th><th>Work Order</th><th>Parameter</th><th>Value</th><th>Result</th></tr></thead>';
+                html += '<tbody>';
+                
+                data.forEach(check => {
+                    let resultClass = '';
+                    if (check.result === 'pass') {
+                        resultClass = 'text-success';
+                    } else if (check.result === 'fail') {
+                        resultClass = 'text-danger';
+                    } else if (check.result === 'warning') {
+                        resultClass = 'text-warning';
+                    }
+                    
+                    html += `<tr>
+                        <td>${check.id}</td>
+                        <td>${check.work_order_id}</td>
+                        <td>${check.parameter}</td>
+                        <td>${check.value} ${check.unit || ''}</td>
+                        <td class="${resultClass}">${check.result}</td>
+                    </tr>`;
+                });
+                
+                html += '</tbody></table>';
+                qualityList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('quality-list').innerHTML = '<p>Error loading quality checks</p>';
+                console.error('Error:', error);
+            });
+    </script>
+</body>
+</html>

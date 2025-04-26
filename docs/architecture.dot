@@ -1,0 +1,79 @@
+digraph G {
+  rankdir=LR;
+  node [shape=box, style=filled, fillcolor=lightblue, fontname="Arial"];
+  edge [fontname="Arial"];
+  
+  subgraph cluster_erp {
+    label="ERP Emulator";
+    style=filled;
+    color=lightgrey;
+    
+    erp_api [label="ERP API"];
+    erp_services [label="ERP Services"];
+    erp_db [label="ERP Database", shape=cylinder, fillcolor=lightgrey];
+    
+    erp_services -> erp_db;
+    erp_api -> erp_services;
+  }
+  
+  subgraph cluster_mes {
+    label="MES Emulator";
+    style=filled;
+    color=lightgrey;
+    
+    mes_api [label="MES API"];
+    mes_services [label="MES Services"];
+    mes_db [label="MES Database", shape=cylinder, fillcolor=lightgrey];
+    
+    mes_services -> mes_db;
+    mes_api -> mes_services;
+  }
+  
+  subgraph cluster_pcs {
+    label="PCS Emulator";
+    style=filled;
+    color=lightgrey;
+    
+    pcs_api [label="PCS API"];
+    pcs_services [label="PCS Services"];
+    pcs_machine [label="Machine Simulator"];
+    pcs_db [label="PCS Database", shape=cylinder, fillcolor=lightgrey];
+    
+    pcs_services -> pcs_db;
+    pcs_api -> pcs_services;
+    pcs_services -> pcs_machine;
+  }
+  
+  subgraph cluster_interface {
+    label="System Interface";
+    style=filled;
+    color=lightgrey;
+    
+    interface_api [label="Interface API"];
+    interface_dashboard [label="Web Dashboard"];
+    
+    interface_dashboard -> interface_api;
+  }
+  
+  subgraph cluster_sync {
+    label="Data Synchronization";
+    style=filled;
+    color=lightgrey;
+    
+    sync_module [label="Sync Module"];
+  }
+  
+  // External connections
+  erp_api -> sync_module [dir=both, label="Production Plans\nMaterials"];
+  mes_api -> sync_module [dir=both, label="Work Orders\nProduction Counts"];
+  pcs_api -> sync_module [dir=both, label="Machine Status\nCycle Data"];
+  
+  interface_api -> erp_api [dir=both, label="Proxy"];
+  interface_api -> mes_api [dir=both, label="Proxy"];
+  interface_api -> pcs_api [dir=both, label="Proxy"];
+  interface_api -> sync_module [dir=both, label="Control"];
+  
+  // User
+  user [label="User", shape=ellipse, fillcolor=lightyellow];
+  user -> interface_dashboard [dir=both];
+}

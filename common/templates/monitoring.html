@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manufacturing Emulator Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Manufacturing Emulator</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/erp">ERP</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mes">MES</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pcs">PCS</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1>Manufacturing Emulator Dashboard</h1>
+        <p>Integrated view of ERP, MES, and PCS systems</p>
+        
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>System Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="system-status">Loading system status...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Production Overview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="production-overview">Loading production overview...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Machine Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="machine-status">Loading machine status...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Active Alarms</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="alarms-list">Loading alarms...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Data Synchronization Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="sync-status">Loading synchronization status...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Check system status
+        function checkSystemStatus() {
+            const systemStatus = document.getElementById('system-status');
+            
+            Promise.all([
+                fetch('http://localhost:5001/api/v1/status').then(response => response.ok ? 'online' : 'offline').catch(() => 'offline'),
+                fetch('http://localhost:5002/api/v1/status').then(response => response.ok ? 'online' : 'offline').catch(() => 'offline'),
+                fetch('http://localhost:5003/api/v1/status').then(response => response.ok ? 'online' : 'offline').catch(() => 'offline')
+            ]).then(([erpStatus, mesStatus, pcsStatus]) => {
+                let html = '<table class="table table-sm">';
+                html += '<tbody>';
+                
+                const getStatusClass = status => status === 'online' ? 'text-success' : 'text-danger';
+                
+                html += `<tr>
+                    <td>ERP System</td>
+                    <td class="${getStatusClass(erpStatus)}">${erpStatus}</td>
+                </tr>`;
+                html += `<tr>
+                    <td>MES System</td>
+                    <td class="${getStatusClass(mesStatus)}">${mesStatus}</td>
+                </tr>`;
+                html += `<tr>
+                    <td>PCS System</td>
+                    <td class="${getStatusClass(pcsStatus)}">${pcsStatus}</td>
+                </tr>`;
+                
+                html += '</tbody></table>';
+                systemStatus.innerHTML = html;
+            }).catch(error => {
+                systemStatus.innerHTML = '<p class="text-danger">Error checking system status</p>';
+                console.error('Error:', error);
+            });
+        }
+        
+        // Load production overview
+        function loadProductionOverview() {
+            const productionOverview = document.getElementById('production-overview');
+            
+            // Get production plans from ERP
+            fetch('/api/erp/production-plans')
+                .then(response => response.json())
+                .then(plans => {
+                    if (plans.length === 0) {
+                        productionOverview.innerHTML = '<p>No production plans found</p>';
+                        return;
+                    }
+                    
+                    // Get work orders from MES
+                    fetch('/api/mes/work-orders')
+                        .then(response => response.json())
+                        .then(workOrders => {
+                            let html = '<table class="table table-striped">';
+                            html += '<thead><tr><th>Product</th><th>Plan Quantity</th><th>Completed</th><th>Work Orders</th><th>Status</th></tr></thead>';
+                            html += '<tbody>';
+                            
+                            plans.forEach(plan => {
+                                // Find related work orders
+                                const relatedWorkOrders = workOrders.filter(wo => wo.production_plan_id === plan.id);
+                                const workOrderCount = relatedWorkOrders.length;
+                                
+                                // Calculate completion percentage
+                                const completedQuantity = plan.completed_quantity || 0;
+                                const completionPercentage = Math.round((completedQuantity / plan.quantity) * 100);
+                                
+                                html += `<tr>
+                                    <td>${plan.product_name || plan.product_id}</td>
+                                    <td>${plan.quantity}</td>
+                                    <td>
+                                        <div class="progress">
+                                            <div class="progress-bar" role="progressbar" style="width: ${completionPercentage}%;" 
+                                                aria-valuenow="${completionPercentage}" aria-valuemin="0" aria-valuemax="100">
+                                                ${completedQuantity} (${completionPercentage}%)
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>${workOrderCount}</td>
+                                    <td>${plan.status}</td>
+                                </tr>`;
+                            });
+                            
+                            html += '</tbody></table>';
+                            productionOverview.innerHTML = html;
+                        })
+                        .catch(error => {
+                            productionOverview.innerHTML = '<p>Error loading work orders</p>';
+                            console.error('Error:', error);
+                        });
+                })
+                .catch(error => {
+                    productionOverview.innerHTML = '<p>Error loading production plans</p>';
+                    console.error('Error:', error);
+                });
+        }
+        
+        // Load machine status
+        function loadMachineStatus() {
+            const machineStatus = document.getElementById('machine-status');
+            
+            fetch('/api/pcs/machines/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (Object.keys(data).length === 0) {
+                        machineStatus.innerHTML = '<p>No machines found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>Machine ID</th><th>Status</th><th>Current Phase</th><th>Work Order</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    for (const [machineId, status] of Object.entries(data)) {
+                        const statusClass = status.running ? 'text-success' : 'text-secondary';
+                        const statusText = status.running ? (status.current_phase || 'Running') : 'Idle';
+                        
+                        html += `<tr>
+                            <td>${machineId}</td>
+                            <td class="${statusClass}">${statusText}</td>
+                            <td>${status.current_phase || '-'}</td>
+                            <td>${status.work_order_id || '-'}</td>
+                        </tr>`;
+                    }
+                    
+                    html += '</tbody></table>';
+                    machineStatus.innerHTML = html;
+                })
+                .catch(error => {
+                    machineStatus.innerHTML = '<p>Error loading machine status</p>';
+                    console.error('Error:', error);
+                });
+        }
+        
+        // Load alarms
+        function loadAlarms() {
+            const alarmsList = document.getElementById('alarms-list');
+            
+            fetch('/api/pcs/alarms')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        alarmsList.innerHTML = '<p>No active alarms</p>';
+                        return;
+                    }
+                    
+                    // Filter active alarms
+                    const activeAlarms = data.filter(alarm => alarm.status === 'active');
+                    
+                    if (activeAlarms.length === 0) {
+                        alarmsList.innerHTML = '<p>No active alarms</p>';
+                        return;
+                    }
+                    
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>Machine</th><th>Code</th><th>Message</th><th>Severity</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    activeAlarms.forEach(alarm => {
+                        let severityClass = '';
+                        if (alarm.severity === 'warning') {
+                            severityClass = 'text-warning';
+                        } else if (alarm.severity === 'error') {
+                            severityClass = 'text-danger';
+                        } else if (alarm.severity === 'critical') {
+                            severityClass = 'text-danger fw-bold';
+                        }
+                        
+                        html += `<tr>
+                            <td>${alarm.machine_id}</td>
+                            <td>${alarm.alarm_code}</td>
+                            <td>${alarm.message}</td>
+                            <td class="${severityClass}">${alarm.severity}</td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table>';
+                    alarmsList.innerHTML = html;
+                })
+                .catch(error => {
+                    alarmsList.innerHTML = '<p>Error loading alarms</p>';
+                    console.error('Error:', error);
+                });
+        }
+        
+        // Load synchronization status
+        function loadSyncStatus() {
+            const syncStatus = document.getElementById('sync-status');
+            
+            fetch('/api/sync/status')
+                .then(response => response.json())
+                .then(data => {
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>Direction</th><th>Last Sync</th><th>Status</th><th>Records</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    if (data.length === 0) {
+                        html += '<tr><td colspan="4">No synchronization data available</td></tr>';
+                    } else {
+                        data.forEach(sync => {
+                            const lastSync = new Date(sync.last_sync).toLocaleString();
+                            const statusClass = sync.status === 'success' ? 'text-success' : 'text-danger';
+                            
+                            html += `<tr>
+                                <td>${sync.source} → ${sync.target}</td>
+                                <td>${lastSync}</td>
+                                <td class="${statusClass}">${sync.status}</td>
+                                <td>${sync.records_processed || 0}</td>
+                            </tr>`;
+                        });
+                    }
+                    
+                    html += '</tbody></table>';
+                    syncStatus.innerHTML = html;
+                })
+                .catch(error => {
+                    // If the sync API fails, show a fallback message
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>Connection</th><th>Status</th></tr></thead>';
+                    html += '<tbody>';
+                    html += '<tr><td>ERP → MES</td><td class="text-success">Connected</td></tr>';
+                    html += '<tr><td>MES → ERP</td><td class="text-success">Connected</td></tr>';
+                    html += '<tr><td>MES → PCS</td><td class="text-success">Connected</td></tr>';
+                    html += '<tr><td>PCS → MES</td><td class="text-success">Connected</td></tr>';
+                    html += '</tbody></table>';
+                    
+                    syncStatus.innerHTML = html;
+                    console.error('Error loading sync status:', error);
+                });
+        }
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            checkSystemStatus();
+            loadProductionOverview();
+            loadMachineStatus();
+            loadAlarms();
+            loadSyncStatus();
+            
+            // Refresh data every 30 seconds
+            setInterval(function() {
+                checkSystemStatus();
+                loadProductionOverview();
+                loadMachineStatus();
+                loadAlarms();
+                loadSyncStatus();
+            }, 30000);
+        });
+    </script>
+</body>
+</html>

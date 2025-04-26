@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCS Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Manufacturing Emulator</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/erp">ERP</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mes">MES</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/pcs">PCS</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1>PCS Dashboard</h1>
+        <p>Process Control System for Plastic Injection Machines</p>
+        
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Machine Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="machine-status">Loading machine status...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Active Alarms</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="alarms-list">Loading alarms...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Machine Parameters</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="parameters-list">Loading parameters...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Recent Cycles</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="cycles-list">Loading cycles...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Fetch machine status
+        fetch('/api/pcs/machines/status')
+            .then(response => response.json())
+            .then(data => {
+                const machineStatus = document.getElementById('machine-status');
+                if (Object.keys(data).length === 0) {
+                    machineStatus.innerHTML = '<p>No machines found</p>';
+                    return;
+                }
+                
+                let html = '<table class="table table-striped">';
+                html += '<thead><tr><th>Machine ID</th><th>Status</th><th>Current Phase</th><th>Work Order</th><th>Cycle Count</th></tr></thead>';
+                html += '<tbody>';
+                
+                for (const [machineId, status] of Object.entries(data)) {
+                    const statusClass = status.running ? 'text-success' : 'text-secondary';
+                    const statusText = status.running ? (status.current_phase || 'Running') : 'Idle';
+                    
+                    html += `<tr>
+                        <td>${machineId}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                        <td>${status.current_phase || '-'}</td>
+                        <td>${status.work_order_id || '-'}</td>
+                        <td>${status.cycle_count || 0}</td>
+                    </tr>`;
+                }
+                
+                html += '</tbody></table>';
+                
+                // Add machine control buttons
+                html += '<div class="mt-3">';
+                html += '<h6>Machine Control</h6>';
+                html += '<div class="row">';
+                
+                for (const machineId of Object.keys(data)) {
+                    html += `<div class="col-md-4 mb-2">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6>Machine ${machineId}</h6>
+                                <button class="btn btn-success btn-sm me-1" onclick="startMachine(${machineId})">Start</button>
+                                <button class="btn btn-danger btn-sm" onclick="stopMachine(${machineId})">Stop</button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                
+                html += '</div></div>';
+                
+                machineStatus.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('machine-status').innerHTML = '<p>Error loading machine status</p>';
+                console.error('Error:', error);
+            });
+            
+        // Fetch alarms
+        fetch('/api/pcs/alarms')
+            .then(response => response.json())
+            .then(data => {
+                const alarmsList = document.getElementById('alarms-list');
+                if (data.length === 0) {
+                    alarmsList.innerHTML = '<p>No active alarms</p>';
+                    return;
+                }
+                
+                // Filter active alarms
+                const activeAlarms = data.filter(alarm => alarm.status === 'active');
+                
+                if (activeAlarms.length === 0) {
+                    alarmsList.innerHTML = '<p>No active alarms</p>';
+                    return;
+                }
+                
+                let html = '<table class="table table-striped">';
+                html += '<thead><tr><th>ID</th><th>Machine</th><th>Code</th><th>Message</th><th>Severity</th><th>Time</th></tr></thead>';
+                html += '<tbody>';
+                
+                activeAlarms.forEach(alarm => {
+                    let severityClass = '';
+                    if (alarm.severity === 'warning') {
+                        severityClass = 'text-warning';
+                    } else if (alarm.severity === 'error') {
+                        severityClass = 'text-danger';
+                    } else if (alarm.severity === 'critical') {
+                        severityClass = 'text-danger fw-bold';
+                    }
+                    
+                    const alarmTime = new Date(alarm.start_time).toLocaleString();
+                    
+                    html += `<tr>
+                        <td>${alarm.id}</td>
+                        <td>${alarm.machine_id}</td>
+                        <td>${alarm.alarm_code}</td>
+                        <td>${alarm.message}</td>
+                        <td class="${severityClass}">${alarm.severity}</td>
+                        <td>${alarmTime}</td>
+                    </tr>`;
+                });
+                
+                html += '</tbody></table>';
+                alarmsList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('alarms-list').innerHTML = '<p>Error loading alarms</p>';
+                console.error('Error:', error);
+            });
+            
+        // Fetch machine parameters (for first machine)
+        fetch('/api/pcs/machines/1/parameters')
+            .then(response => response.json())
+            .then(data => {
+                const parametersList = document.getElementById('parameters-list');
+                if (Object.keys(data).length === 0) {
+                    parametersList.innerHTML = '<p>No parameters found</p>';
+                    return;
+                }
+                
+                let html = '<div class="row">';
+                
+                // Group parameters by category
+                const categories = {
+                    'Injection': ['injection_pressure', 'injection_speed', 'injection_time'],
+                    'Temperature': ['barrel_temperature', 'mold_temperature', 'material_temperature'],
+                    'Mold': ['clamp_force', 'mold_open_time', 'mold_close_time'],
+                    'Cooling': ['cooling_time', 'cooling_temperature'],
+                    'Other': []
+                };
+                
+                // Categorize parameters
+                for (const [name, value] of Object.entries(data)) {
+                    let categorized = false;
+                    for (const category in categories) {
+                        if (categories[category].includes(name)) {
+                            categorized = true;
+                            break;
+                        }
+                    }
+                    if (!categorized) {
+                        categories['Other'].push(name);
+                    }
+                }
+                
+                // Create parameter cards by category
+                for (const [category, params] of Object.entries(categories)) {
+                    if (params.length === 0 && category !== 'Other') continue;
+                    
+                    html += `<div class="col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6>${category}</h6>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Parameter</th>
+                                            <th>Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>`;
+                    
+                    if (category === 'Other') {
+                        // Add all uncategorized parameters
+                        for (const [name, value] of Object.entries(data)) {
+                            let categorized = false;
+                            for (const cat in categories) {
+                                if (cat !== 'Other' && categories[cat].includes(name)) {
+                                    categorized = true;
+                                    break;
+                                }
+                            }
+                            if (!categorized) {
+                                const displayName = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                html += `<tr>
+                                    <td>${displayName}</td>
+                                    <td>${value}</td>
+                                </tr>`;
+                            }
+                        }
+                    } else {
+                        // Add categorized parameters
+                        for (const param of params) {
+                            if (data[param] !== undefined) {
+                                const displayName = param.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                html += `<tr>
+                                    <td>${displayName}</td>
+                                    <td>${data[param]}</td>
+                                </tr>`;
+                            }
+                        }
+                    }
+                    
+                    html += `</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                
+                html += '</div>';
+                parametersList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('parameters-list').innerHTML = '<p>Error loading parameters</p>';
+                console.error('Error:', error);
+            });
+            
+        // Fetch cycles
+        fetch('/api/pcs/machines/1/cycles')
+            .then(response => response.json())
+            .then(data => {
+                const cyclesList = document.getElementById('cycles-list');
+                if (data.length === 0) {
+                    cyclesList.innerHTML = '<p>No cycles found</p>';
+                    return;
+                }
+                
+                let html = '<table class="table table-striped">';
+                html += '<thead><tr><th>Cycle ID</th><th>Machine</th><th>Work Order</th><th>Start Time</th><th>End Time</th><th>Duration</th><th>Status</th></tr></thead>';
+                html += '<tbody>';
+                
+                // Sort cycles by start time (newest first)
+                data.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+                
+                // Show only the 10 most recent cycles
+                const recentCycles = data.slice(0, 10);
+                
+                recentCycles.forEach(cycle => {
+                    const startTime = new Date(cycle.start_time).toLocaleString();
+                    const endTime = cycle.end_time ? new Date(cycle.end_time).toLocaleString() : '-';
+                    const duration = cycle.duration ? `${cycle.duration.toFixed(1)}s` : '-';
+                    
+                    html += `<tr>
+                        <td>${cycle.id}</td>
+                        <td>${cycle.machine_id}</td>
+                        <td>${cycle.work_order_id || '-'}</td>
+                        <td>${startTime}</td>
+                        <td>${endTime}</td>
+                        <td>${duration}</td>
+                        <td>${cycle.status}</td>
+                    </tr>`;
+                });
+                
+                html += '</tbody></table>';
+                cyclesList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('cycles-list').innerHTML = '<p>Error loading cycles</p>';
+                console.error('Error:', error);
+            });
+            
+        // Machine control functions
+        function startMachine(machineId) {
+            fetch(`/api/pcs/machines/${machineId}/start`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ work_order_id: 1 })  // Default to work order 1
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(`Machine ${machineId} started`);
+                // Refresh machine status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            })
+            .catch(error => {
+                console.error('Error starting machine:', error);
+                alert(`Error starting machine ${machineId}`);
+            });
+        }
+        
+        function stopMachine(machineId) {
+            fetch(`/api/pcs/machines/${machineId}/stop`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(`Machine ${machineId} stopped`);
+                // Refresh machine status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            })
+            .catch(error => {
+                console.error('Error stopping machine:', error);
+                alert(`Error stopping machine ${machineId}`);
+            });
+        }
+    </script>
+</body>
+</html>
