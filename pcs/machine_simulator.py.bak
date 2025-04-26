@@ -1,0 +1,643 @@
+"""
+PCS Emulator - Plastic Injection Machine Simulator
+Simulates the behavior of a plastic injection molding machine
+"""
+import time
+import math
+import random
+import threading
+import datetime
+import json
+import logging
+from sqlalchemy.exc import SQLAlchemyError
+from database import get_db_session, close_db_session
+from models import MachineParameter, SensorData, Alarm, MachineState, CycleData, MachineCommand
+
+logger = logging.getLogger('pcs_emulator.machine_simulator')
+
+class InjectionMoldingMachine:
+    """Simulates a plastic injection molding machine"""
+    
+    # Machine cycle phases
+    PHASES = [
+        'idle',
+        'mold_close',
+        'injection',
+        'packing',
+        'cooling',
+        'mold_open',
+        'part_ejection'
+    ]
+    
+    # Phase durations in seconds (simplified for simulation)
+    PHASE_DURATIONS = {
+        'idle': 0,
+        'mold_close': 2,
+        'injection': 3,
+        'packing': 5,
+        'cooling': 15,
+        'mold_open': 2,
+        'part_ejection': 3
+    }
+    
+    def __init__(self, machine_id, config):
+        """Initialize the machine simulator"""
+        self.machine_id = machine_id
+        self.config = config
+        self.machine_config = config['machine']
+        
+        # Machine state
+        self.running = False
+        self.current_phase = 'idle'
+        self.current_work_order_id = None
+        self.cycle_count = 0
+        self.current_cycle_start_time = None
+        self.current_state_id = None
+        self.current_cycle_id = None
+        
+        # Parameters and setpoints
+        self.parameters = {}
+        self.sensors = {}
+        
+        # Initialize parameters from config
+        for param in self.machine_config['parameters']:
+            self.parameters[param['name']] = {
+                'current_value': (param['min'] + param['max']) / 2,  # Start at midpoint
+                'set_point': (param['min'] + param['max']) / 2,
+                'min_value': param['min'],
+                'max_value': param['max'],
+                'unit': param['unit']
+            }
+        
+        # Initialize sensors from config
+        for sensor in self.machine_config['sensors']:
+            self.sensors[sensor['name']] = {
+                'value': 0,
+                'update_frequency': sensor['update_frequency'],
+                'noise_factor': sensor['noise_factor'],
+                'last_update': 0
+            }
+        
+        # Simulation thread
+        self.simulation_thread = None
+        self.stop_event = threading.Event()
+        
+        # Initialize database state
+        self._init_db_state()
+    
+    def _init_db_state(self):
+        """Initialize the machine state in the database"""
+        session = get_db_session()
+        try:
+            # Create initial machine parameters
+            for param_name, param_data in self.parameters.items():
+                param = session.query(MachineParameter).filter(
+                    MachineParameter.machine_id == self.machine_id,
+                    MachineParameter.parameter_name == param_name
+                ).first()
+                
+                if not param:
+                    param = MachineParameter(
+                        machine_id=self.machine_id,
+                        parameter_name=param_name,
+                        current_value=param_data['current_value'],
+                        set_point=param_data['set_point'],
+                        min_value=param_data['min_value'],
+                        max_value=param_data['max_value'],
+                        unit=param_data['unit']
+                    )
+                    session.add(param)
+                else:
+                    # Update existing parameter
+                    param.current_value = param_data['current_value']
+                    param.set_point = param_data['set_point']
+                    param.min_value = param_data['min_value']
+                    param.max_value = param_data['max_value']
+                    param.unit = param_data['unit']
+            
+            # Create initial machine state
+            state = MachineState(
+                machine_id=self.machine_id,
+                state='idle',
+                start_time=datetime.datetime.utcnow(),
+                cycle_count=0
+            )
+            session.add(state)
+            session.flush()
+            self.current_state_id = state.id
+            
+            session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error initializing machine state: {str(e)}")
+        finally:
+            close_db_session(session)
+    
+    def start(self, work_order_id=None):
+        """Start the machine simulation"""
+        if self.running:
+            return False
+        
+        self.running = True
+        self.current_work_order_id = work_order_id
+        self.stop_event.clear()
+        
+        # Update machine state in database
+        self._update_machine_state('setup')
+        
+        # Start simulation thread
+        self.simulation_thread = threading.Thread(target=self._simulation_loop)
+        self.simulation_thread.daemon = True
+        self.simulation_thread.start()
+        
+        logger.info(f"Machine {self.machine_id} started with work order {work_order_id}")
+        return True
+    
+    def stop(self):
+        """Stop the machine simulation"""
+        if not self.running:
+            return False
+        
+        self.stop_event.set()
+        if self.simulation_thread:
+            self.simulation_thread.join(timeout=5)
+        
+        self.running = False
+        self.current_phase = 'idle'
+        
+        # Update machine state in database
+        self._update_machine_state('idle')
+        
+        logger.info(f"Machine {self.machine_id} stopped")
+        return True
+    
+    def set_parameter(self, parameter_name, value):
+        """Set a machine parameter"""
+        if parameter_name not in self.parameters:
+            return False
+        
+        param = self.parameters[parameter_name]
+        
+        # Validate value is within limits
+        if value < param['min_value'] or value > param['max_value']:
+            return False
+        
+        # Update parameter setpoint
+        param['set_point'] = value
+        
+        # Update parameter in database
+        session = get_db_session()
+        try:
+            db_param = session.query(MachineParameter).filter(
+                MachineParameter.machine_id == self.machine_id,
+                MachineParameter.parameter_name == parameter_name
+            ).first()
+            
+            if db_param:
+                db_param.set_point = value
+                session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error updating parameter: {str(e)}")
+            return False
+        finally:
+            close_db_session(session)
+        
+        logger.info(f"Machine {self.machine_id} parameter {parameter_name} set to {value}")
+        return True
+    
+    def get_status(self):
+        """Get the current machine status"""
+        return {
+            'machine_id': self.machine_id,
+            'running': self.running,
+            'current_phase': self.current_phase,
+            'work_order_id': self.current_work_order_id,
+            'cycle_count': self.cycle_count,
+            'parameters': {name: data['current_value'] for name, data in self.parameters.items()},
+            'sensors': {name: data['value'] for name, data in self.sensors.items()}
+        }
+    
+    def _simulation_loop(self):
+        """Main simulation loop"""
+        try:
+            # Start with setup phase
+            time.sleep(5)  # Simulate setup time
+            
+            # Update machine state to running
+            self._update_machine_state('running')
+            
+            # Run cycles until stopped
+            while not self.stop_event.is_set():
+                self._run_cycle()
+                
+                # Check if we should continue
+                if self.stop_event.is_set():
+                    break
+            
+            logger.info(f"Machine {self.machine_id} simulation loop ended")
+        except Exception as e:
+            logger.error(f"Error in simulation loop: {str(e)}")
+            # Update machine state to error
+            self._update_machine_state('error')
+            self._create_alarm('SIM_ERROR', f"Simulation error: {str(e)}", 'error')
+    
+    def _run_cycle(self):
+        """Run a single production cycle"""
+        cycle_start_time = datetime.datetime.utcnow()
+        self.current_cycle_start_time = cycle_start_time
+        self.cycle_count += 1
+        
+        # Create cycle record in database
+        cycle_id = self._create_cycle_record(cycle_start_time)
+        self.current_cycle_id = cycle_id
+        
+        try:
+            # Run through each phase of the cycle
+            for phase in self.PHASES[1:]:  # Skip 'idle'
+                if self.stop_event.is_set():
+                    break
+                
+                self.current_phase = phase
+                phase_duration = self.PHASE_DURATIONS[phase]
+                
+                # Simulate phase execution
+                start_time = time.time()
+                while time.time() - start_time < phase_duration:
+                    if self.stop_event.is_set():
+                        break
+                    
+                    # Update parameters and sensors
+                    self._update_parameters(phase)
+                    self._update_sensors(phase)
+                    
+                    # Sleep a short time
+                    time.sleep(0.1)
+            
+            # Cycle completed
+            cycle_end_time = datetime.datetime.utcnow()
+            cycle_time = (cycle_end_time - cycle_start_time).total_seconds()
+            
+            # Update cycle record
+            self._update_cycle_record(cycle_id, cycle_end_time, cycle_time, 'completed')
+            
+            # Reset to idle phase
+            self.current_phase = 'idle'
+            
+            # Update machine state cycle count
+            self._update_state_cycle_count()
+            
+            logger.info(f"Machine {self.machine_id} completed cycle {self.cycle_count} in {cycle_time:.2f} seconds")
+            
+            # Simulate random alarms (5% chance)
+            if random.random() < 0.05:
+                self._create_random_alarm()
+        
+        except Exception as e:
+            logger.error(f"Error in cycle execution: {str(e)}")
+            # Update cycle record with error
+            self._update_cycle_record(cycle_id, datetime.datetime.utcnow(), None, 'error')
+            # Create alarm
+            self._create_alarm('CYCLE_ERROR', f"Cycle error: {str(e)}", 'error')
+    
+    def _update_parameters(self, phase):
+        """Update machine parameters based on current phase"""
+        for param_name, param_data in self.parameters.items():
+            # Gradually move current value toward setpoint
+            current = param_data['current_value']
+            setpoint = param_data['set_point']
+            
+            # Add some phase-specific variations
+            if phase == 'injection' and param_name == 'pressure':
+                # Pressure increases during injection
+                target = setpoint * 1.1
+            elif phase == 'cooling' and param_name == 'temperature':
+                # Temperature decreases during cooling
+                target = setpoint * 0.9
+            else:
+                target = setpoint
+            
+            # Add some random noise
+            noise = random.uniform(-0.02, 0.02) * setpoint
+            
+            # Calculate new value (move 5% toward target)
+            new_value = current + (target - current) * 0.05 + noise
+            
+            # Ensure within limits
+            new_value = max(param_data['min_value'], min(param_data['max_value'], new_value))
+            
+            # Update current value
+            param_data['current_value'] = new_value
+            
+            # Update in database (less frequently to reduce DB load)
+            if random.random() < 0.1:  # 10% chance each update
+                self._update_parameter_in_db(param_name, new_value, setpoint)
+    
+    def _update_sensors(self, phase):
+        """Update sensor values based on current phase and parameters"""
+        current_time = time.time()
+        
+        for sensor_name, sensor_data in self.sensors.items():
+            # Check if it's time to update this sensor
+            if current_time - sensor_data['last_update'] < 1.0 / sensor_data['update_frequency']:
+                continue
+            
+            # Calculate base sensor value based on related parameter
+            if sensor_name == 'mold_temperature':
+                base_value = self.parameters['temperature']['current_value'] * 0.9  # Mold is cooler than set temperature
+            elif sensor_name == 'hydraulic_pressure':
+                base_value = self.parameters['pressure']['current_value'] * 0.95
+            elif sensor_name == 'position':
+                # Position depends on phase
+                if phase in ['mold_close', 'injection', 'packing', 'cooling']:
+                    base_value = 0  # Closed position
+                elif phase == 'mold_open':
+                    base_value = 50  # Half open
+                elif phase == 'part_ejection':
+                    base_value = 100  # Fully open
+                else:
+                    base_value = 100  # Default to open
+            else:
+                # Default calculation
+                base_value = 50  # Arbitrary value
+            
+            # Add noise
+            noise_factor = sensor_data['noise_factor']
+            noise = random.uniform(-noise_factor, noise_factor) * base_value
+            
+            # Calculate new value
+            new_value = base_value + noise
+            
+            # Update sensor value
+            sensor_data['value'] = new_value
+            sensor_data['last_update'] = current_time
+            
+            # Record in database
+            self._record_sensor_data(sensor_name, new_value)
+    
+    def _update_parameter_in_db(self, parameter_name, current_value, set_point):
+        """Update parameter in database"""
+        session = get_db_session()
+        try:
+            param = session.query(MachineParameter).filter(
+                MachineParameter.machine_id == self.machine_id,
+                MachineParameter.parameter_name == parameter_name
+            ).first()
+            
+            if param:
+                param.current_value = current_value
+                param.set_point = set_point
+                session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error updating parameter in DB: {str(e)}")
+        finally:
+            close_db_session(session)
+    
+    def _record_sensor_data(self, sensor_name, value):
+        """Record sensor data in database"""
+        # Only record a percentage of readings to avoid database overload
+        if random.random() > 0.1:  # 10% sampling rate
+            return
+        
+        session = get_db_session()
+        try:
+            sensor_data = SensorData(
+                machine_id=self.machine_id,
+                sensor_name=sensor_name,
+                value=value,
+                timestamp=datetime.datetime.utcnow(),
+                quality=100  # Assume perfect quality for simulation
+            )
+            session.add(sensor_data)
+            session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error recording sensor data: {str(e)}")
+        finally:
+            close_db_session(session)
+    
+    def _update_machine_state(self, state):
+        """Update machine state in database"""
+        session = get_db_session()
+        try:
+            # End current state
+            if self.current_state_id:
+                current_state = session.query(MachineState).filter(
+                    MachineState.id == self.current_state_id
+                ).first()
+                
+                if current_state and not current_state.end_time:
+                    current_state.end_time = datetime.datetime.utcnow()
+            
+            # Create new state
+            new_state = MachineState(
+                machine_id=self.machine_id,
+                state=state,
+                start_time=datetime.datetime.utcnow(),
+                work_order_id=self.current_work_order_id,
+                cycle_count=0
+            )
+            session.add(new_state)
+            session.flush()
+            self.current_state_id = new_state.id
+            
+            session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error updating machine state: {str(e)}")
+        finally:
+            close_db_session(session)
+    
+    def _update_state_cycle_count(self):
+        """Update cycle count in current machine state"""
+        if not self.current_state_id:
+            return
+        
+        session = get_db_session()
+        try:
+            state = session.query(MachineState).filter(
+                MachineState.id == self.current_state_id
+            ).first()
+            
+            if state:
+                state.cycle_count += 1
+                session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error updating state cycle count: {str(e)}")
+        finally:
+            close_db_session(session)
+    
+    def _create_cycle_record(self, start_time):
+        """Create a new cycle record in database"""
+        session = get_db_session()
+        try:
+            cycle = CycleData(
+                machine_id=self.machine_id,
+                work_order_id=self.current_work_order_id,
+                cycle_number=self.cycle_count,
+                start_time=start_time
+            )
+            session.add(cycle)
+            session.flush()
+            cycle_id = cycle.id
+            session.commit()
+            return cycle_id
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error creating cycle record: {str(e)}")
+            return None
+        finally:
+            close_db_session(session)
+    
+    def _update_cycle_record(self, cycle_id, end_time, cycle_time, status):
+        """Update a cycle record in database"""
+        if not cycle_id:
+            return
+        
+        session = get_db_session()
+        try:
+            cycle = session.query(CycleData).filter(
+                CycleData.id == cycle_id
+            ).first()
+            
+            if cycle:
+                cycle.end_time = end_time
+                cycle.cycle_time = cycle_time
+                cycle.status = status
+                session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error updating cycle record: {str(e)}")
+        finally:
+            close_db_session(session)
+    
+    def _create_alarm(self, alarm_code, description, severity):
+        """Create an alarm in database"""
+        session = get_db_session()
+        try:
+            alarm = Alarm(
+                machine_id=self.machine_id,
+                alarm_code=alarm_code,
+                description=description,
+                severity=severity,
+                status='active',
+                start_time=datetime.datetime.utcnow()
+            )
+            session.add(alarm)
+            session.commit()
+            
+            logger.warning(f"Machine {self.machine_id} alarm: {alarm_code} - {description}")
+            
+            # If critical or error, stop the machine
+            if severity in ['critical', 'error']:
+                self.stop_event.set()
+                self._update_machine_state('error')
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error creating alarm: {str(e)}")
+        finally:
+            close_db_session(session)
+    
+    def _create_random_alarm(self):
+        """Create a random alarm for simulation purposes"""
+        alarm_types = [
+            {
+                'code': 'TEMP_HIGH',
+                'description': 'Temperature exceeds recommended range',
+                'severity': 'warning'
+            },
+            {
+                'code': 'PRESSURE_LOW',
+                'description': 'Pressure below minimum threshold',
+                'severity': 'warning'
+            },
+            {
+                'code': 'MOLD_WEAR',
+                'description': 'Mold wear detected, maintenance recommended',
+                'severity': 'info'
+            },
+            {
+                'code': 'HYDRAULIC_LEAK',
+                'description': 'Potential hydraulic fluid leak detected',
+                'severity': 'warning'
+            },
+            {
+                'code': 'EJECTOR_JAM',
+                'description': 'Part ejector mechanism jammed',
+                'severity': 'error'
+            }
+        ]
+        
+        # Select a random alarm
+        alarm = random.choice(alarm_types)
+        
+        # Create the alarm
+        self._create_alarm(alarm['code'], alarm['description'], alarm['severity'])
+
+
+class MachineSimulatorManager:
+    """Manages multiple machine simulators"""
+    
+    def __init__(self, config):
+        """Initialize the machine simulator manager"""
+        self.config = config
+        self.machines = {}
+    
+    def create_machine(self, machine_id):
+        """Create a new machine simulator"""
+        if machine_id in self.machines:
+            return False
+        
+        machine = InjectionMoldingMachine(machine_id, self.config['pcs'])
+        self.machines[machine_id] = machine
+        return True
+    
+    def get_machine(self, machine_id):
+        """Get a machine simulator by ID"""
+        return self.machines.get(machine_id)
+    
+    def start_machine(self, machine_id, work_order_id=None):
+        """Start a machine simulator"""
+        machine = self.get_machine(machine_id)
+        if not machine:
+            return False
+        
+        return machine.start(work_order_id)
+    
+    def stop_machine(self, machine_id):
+        """Stop a machine simulator"""
+        machine = self.get_machine(machine_id)
+        if not machine:
+            return False
+        
+        return machine.stop()
+    
+    def set_machine_parameter(self, machine_id, parameter_name, value):
+        """Set a machine parameter"""
+        machine = self.get_machine(machine_id)
+        if not machine:
+            return False
+        
+        return machine.set_parameter(parameter_name, value)
+    
+    def get_machine_status(self, machine_id):
+        """Get machine status"""
+        machine = self.get_machine(machine_id)
+        if not machine:
+            return None
+        
+        return machine.get_status()
+    
+    def get_all_machines_status(self):
+        """Get status of all machines"""
+        return {machine_id: machine.get_status() for machine_id, machine in self.machines.items()}
+    
+    def shutdown(self):
+        """Shutdown all machine simulators"""
+        for machine_id, machine in self.machines.items():
+            if machine.running:
+                machine.stop()
+        
+        logger.info("All machine simulators shut down")

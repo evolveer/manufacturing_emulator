@@ -1,0 +1,42 @@
+{
+  "total": 7,
+  "passed": 2,
+  "failed": 5,
+  "tests": [
+    {
+      "name": "System Availability",
+      "status": "PASSED",
+      "duration": 0.014830350875854492
+    },
+    {
+      "name": "ERP Functionality",
+      "status": "FAILED",
+      "duration": 5.5789947509765625e-05
+    },
+    {
+      "name": "MES Functionality",
+      "status": "FAILED",
+      "duration": 0.008562564849853516
+    },
+    {
+      "name": "PCS Functionality",
+      "status": "FAILED",
+      "duration": 0.014404773712158203
+    },
+    {
+      "name": "Data Synchronization",
+      "status": "FAILED",
+      "duration": 0.003542661666870117
+    },
+    {
+      "name": "Interface Dashboard",
+      "status": "PASSED",
+      "duration": 0.128676176071167
+    },
+    {
+      "name": "End-to-End Workflow",
+      "status": "FAILED",
+      "duration": 0.0066471099853515625
+    }
+  ]
+}

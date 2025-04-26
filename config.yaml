@@ -1,0 +1,80 @@
+erp:
+  api_version: v1
+  database: sqlite:///database/erp.db
+  host: 0.0.0.0
+  modules:
+  - inventory
+  - orders
+  - master_data
+  - production_planning
+  port: 5001
+mes:
+  api_version: v1
+  database: sqlite:///database/mes.db
+  erp_connection:
+    poll_interval: 5
+    url: http://localhost:5001/api/v1
+  host: 0.0.0.0
+  modules:
+  - scheduling
+  - work_orders
+  - quality_control
+  - material_tracking
+  port: 5002
+pcs:
+  api_version: v1
+  database: sqlite:///database/pcs.db
+  host: 0.0.0.0
+  machine:
+    cycle_time: 30
+    parameters:
+    - max: 250
+      min: 180
+      name: temperature
+      unit: celsius
+    - max: 200
+      min: 50
+      name: pressure
+      unit: bar
+    - max: 150
+      min: 50
+      name: clamp_force
+      unit: tons
+    - max: 100
+      min: 10
+      name: injection_speed
+      unit: mm/s
+    sensors:
+    - name: mold_temperature
+      noise_factor: 0.02
+      update_frequency: 1
+    - name: hydraulic_pressure
+      noise_factor: 0.03
+      update_frequency: 2
+    - name: position
+      noise_factor: 0.01
+      update_frequency: 5
+    type: injection_molding
+  mes_connection:
+    poll_interval: 2
+    url: http://localhost:5002/api/v1
+  modules:
+  - machine_control
+  - sensor_data
+  - alarms
+  port: 5003
+system:
+  data_directory: ./database
+  log_level: INFO
+  time_sync_interval: 1
+interface:
+  host: '0.0.0.0'
+  port: 5000
+  api_version: 'v1'
+sync:
+  enabled: true
+  intervals:
+    erp_to_mes: 60        # every 1 minute (new orders/materials)
+    mes_to_erp: 120       # every 2 minutes (order updates/status)
+    mes_to_pcs: 30        # every 30 seconds (work orders to machines)
+    pcs_to_mes: 15        # every 15 seconds (sensor data/feedback)
