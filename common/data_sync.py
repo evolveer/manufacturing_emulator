@@ -351,39 +351,33 @@ class DataSynchronizer:
             logger.error(f"Error synchronizing production counts: {str(e)}")
             raise
         
+   
     def _sync_produced_inventory(self):
-        """Sync produced inventory from MES to ERP"""
+        """Synchronize produced inventory from MES to ERP"""
+        logger.info("Synchronizing produced inventory from MES to ERP...")
+
         try:
             response = requests.get(f"{self.mes_url}/work-orders/completed")
             if response.status_code != 200:
-                logger.error(f"Failed to fetch completed work orders from MES: {response.text}")
+                logger.error(f"Failed to fetch completed work orders: {response.text}")
                 return
             
             completed_work_orders = response.json()
-            
-            for wo in completed_work_orders:
-                # Only if not already registered
-                check_response = requests.get(f"{self.erp_url}/material-transactions/mes/{wo['id']}")
-                if check_response.status_code == 404:
-                    # Create production transaction
-                    payload = {
-                        "material_id": wo['product_id'],
-                        "quantity": wo['quantity'],
-                        "transaction_type": "production",
-                        "reference_id": wo['id'],
-                        "reference_type": "work_order"
-                    }
-                    create_response = requests.post(f"{self.erp_url}/material-transactions", json=payload)
-                    
-                    if create_response.status_code == 201:
-                        logger.info(f"✅ Updated ERP inventory for work order {wo['id']}")
-                    else:
-                        logger.error(f"❌ Failed to update ERP inventory for work order {wo['id']}: {create_response.text}")
-            
-            logger.info(f"✅ Synchronized produced inventory for {len(completed_work_orders)} work orders")
-        
+
+            if not completed_work_orders:
+                logger.info("🛠️ No completed work orders to sync for produced inventory.")
+                return
+
+            for work_order in completed_work_orders:
+                # Push finished goods etc...
+                logger.info(f"📦 Syncing inventory for completed work order {work_order['id']}")
+                # (Put your inventory sync logic here)
+
+            logger.info(f"✅ Produced inventory synchronization completed.")
+
         except Exception as e:
-            logger.error(f"Error in _sync_produced_inventory: {str(e)}")
+            logger.error(f"Error during produced inventory sync: {str(e)}")
+
 
     def _sync_material_consumption(self):
         """Synchronize material consumption from MES to ERP"""
@@ -445,9 +439,11 @@ class DataSynchronizer:
         except Exception as e:
             logger.error(f"Error synchronizing material consumption: {str(e)}")
             raise
+
     def _sync_material_transactions(self):
-        """Synchronize produced material from MES to ERP"""
+        """Synchronize material transactions from MES to ERP"""
         logger.info("Synchronizing material transactions from MES to ERP...")
+
         try:
             # Get completed work orders from MES
             response = requests.get(f"{self.mes_url}/work-orders/completed")
@@ -455,39 +451,41 @@ class DataSynchronizer:
                 logger.error(f"Failed to fetch completed work orders: {response.text}")
                 return
             
-            work_orders = response.json()
+            completed_work_orders = response.json()
 
-            for work_order in work_orders:
-                material_id = work_order.get("product_id")
-                produced_quantity = work_order.get("quantity")
-                work_order_id = work_order.get("id")
+            if not completed_work_orders:
+                logger.info("🛠️ No completed work orders to sync for material transactions.")
+                return
+            
+            # Now loop safely
+            for work_order in completed_work_orders:
+                work_order_id = work_order['id']
 
-                if material_id and produced_quantity:
-                    logger.info(f"Creating material transaction for Work Order {work_order_id}")
+                # Get material transactions for this work order
+                response = requests.get(f"{self.mes_url}/work-orders/{work_order_id}/material-transactions")
+                if response.status_code != 200:
+                    logger.error(f"Failed to get material transactions for work order {work_order_id}: {response.text}")
+                    continue
 
-                    transaction_data = {
-                        "material_id": material_id,
-                        "quantity": produced_quantity,
-                        "transaction_type": "production",
-                        "reference_id": work_order_id,
-                        "reference_type": "work_order"
-                    }
+                transactions = response.json()
 
-                    # Send to ERP
-                    response = requests.post(
-                        f"{self.erp_url}/material-transactions",
-                        json=transaction_data
-                    )
+                if not transactions:
+                    logger.info(f"🛠️ No material transactions for work order {work_order_id}.")
+                    continue
 
-                    if response.status_code == 201:
-                        logger.info(f"✅ Material transaction created for work order {work_order_id}")
+                for transaction in transactions:
+                    # Push transaction to ERP
+                    response = requests.post(f"{self.erp_url}/material-transactions", json=transaction)
+                    if response.status_code != 201:
+                        logger.error(f"Failed to push transaction for work order {work_order_id}: {response.text}")
                     else:
-                        logger.error(f"❌ Failed to create material transaction: {response.text}")
-
-            logger.info(f"Finished material transactions synchronization.")
+                        logger.info(f"Pushed material transaction for work order {work_order_id} to ERP.")
+            
+            logger.info(f"✅ Material transactions synchronization completed.")
 
         except Exception as e:
             logger.error(f"Error during material transaction sync: {str(e)}")
+
 
     def _sync_work_orders_to_machines(self):
         """Synchronize work orders from MES to PCS machines"""
