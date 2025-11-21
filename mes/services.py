@@ -652,8 +652,18 @@ class ProductionPlanService:
     def create_plan(data):
         session = get_db_session()
         try:
+            # Generate a plan number if not provided or if a duplicate is found
+            def new_plan_number():
+                return f"PP-{datetime.datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+
+            plan_number = data.get('plan_number') or new_plan_number()
+            # If provided plan_number collides, regenerate once
+            existing = session.query(ProductionPlan).filter(ProductionPlan.plan_number == plan_number).first()
+            if existing:
+                plan_number = new_plan_number()
+
             plan = ProductionPlan(
-                plan_number=data['plan_number'],
+                plan_number=plan_number,
                 order_id=data.get('order_id'),
                 status=data.get('status', 'planned'),
                 start_date=ProductionPlanService._parse_datetime(data.get('start_date')),
