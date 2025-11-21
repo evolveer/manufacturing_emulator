@@ -3,12 +3,15 @@ MES Emulator - Service Layer
 Provides business logic for the MES emulator
 """
 import datetime
+import logging
 import uuid
 import requests
 from flask_restful import Resource
 from sqlalchemy.exc import SQLAlchemyError
 from database import get_db_session, close_db_session
 from models import WorkOrder, Machine, ProductionSchedule, QualityCheck, MaterialTracking, ProductionCount, Downtime,Material,ProductionPlan
+
+logger = logging.getLogger(__name__)
 
 class WorkOrderService:
     """Service for work order management"""
@@ -1112,9 +1115,14 @@ class MaterialTrackingService:
                 
                 transaction = MaterialTrackingService.create_material_transaction(transaction_data)
                 transactions.append(transaction)
+                logger.info(
+                    "Allocated material for WO %s material=%s qty=%s",
+                    work_order_id, material_id, quantity
+                )
             
             return transactions
         except Exception as e:
+            logger.error("Allocation failed for WO %s: %s", work_order_id, e)
             raise e
         finally:
             close_db_session(session)
@@ -1161,22 +1169,25 @@ class MaterialTrackingService:
                     'actual_quantity': allocation.planned_quantity,  # Simplified: assume actual = planned
                     'transaction_type': 'consumption'
                 }
-                
                 transaction = MaterialTrackingService.create_material_transaction(transaction_data)
                 consumption_transactions.append(transaction)
                 
                 # Update ERP inventory (negative quantity for consumption)
                 try:
-                    requests.put(
+                    resp = requests.put(
                         f"{erp_api_url}/materials/{allocation.material_id}/stock",
                         json={
                             'quantity_change': -allocation.planned_quantity,
                             'transaction_type': 'production_consumption'
                         }
                     )
+                    logger.info(
+                        "Consumed material via ERP: wo=%s material=%s qty=%s status=%s",
+                        work_order_id, allocation.material_id, allocation.planned_quantity, resp.status_code
+                    )
                 except Exception as e:
                     # Log error but continue with other materials
-                    print(f"Error updating ERP inventory: {str(e)}")
+                    logger.error("Error updating ERP inventory for WO %s material %s: %s", work_order_id, allocation.material_id, e)
             
             return consumption_transactions
         except SQLAlchemyError as e:

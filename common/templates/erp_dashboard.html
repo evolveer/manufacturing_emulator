@@ -42,7 +42,7 @@
     <div class="container mt-4">
         <h1>ERP Dashboard</h1>
         <p>Enterprise Resource Planning System</p>
-        
+
         <div class="row mt-4">
             <div class="col-md-6">
                 <div class="card">
@@ -97,10 +97,27 @@
                 </div>
             </div>
         </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Orders & Shipping Simulation</h5>
+                        <small class="text-muted">Track shipping states per order</small>
+                    </div>
+                    <div class="card-body">
+                        <div id="orders-list">Loading orders...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        const SHIPPING_KEY = 'erpShippingState';
+        let shippingState = {};
+
         document.addEventListener('DOMContentLoaded', () => {
             // default dates
             const today = new Date().toISOString().split('T')[0];
@@ -108,12 +125,84 @@
             document.getElementById('planStartDate').value = today;
             document.getElementById('planEndDate').value = nextWeek;
 
+            restoreShippingState();
+            loadOrders();
             loadMaterials();
             loadProducts();
             loadPlans();
 
             document.getElementById('planForm').addEventListener('submit', handlePlanSubmit);
         });
+
+        function restoreShippingState() {
+            try {
+                const raw = localStorage.getItem(SHIPPING_KEY);
+                shippingState = raw ? JSON.parse(raw) : {};
+            } catch {
+                shippingState = {};
+            }
+        }
+
+        function persistShippingState() {
+            localStorage.setItem(SHIPPING_KEY, JSON.stringify(shippingState));
+        }
+
+        function setShippingStatus(orderId, status) {
+            shippingState[orderId] = status;
+            persistShippingState();
+            loadOrders();
+        }
+
+        function shippingBadge(status) {
+            const map = {
+                pending: 'secondary',
+                ready_to_ship: 'warning',
+                shipped: 'info',
+                delivered: 'success'
+            };
+            const text = status ? status.replace('_', ' ') : 'pending';
+            const cls = map[status] || 'secondary';
+            return `<span class="badge bg-${cls} text-uppercase">${text}</span>`;
+        }
+
+        function loadOrders() {
+            fetch('/api/erp/orders')
+                .then(r => r.json())
+                .then(data => {
+                    const ordersList = document.getElementById('orders-list');
+                    if (!Array.isArray(data) || data.length === 0) {
+                        ordersList.innerHTML = '<p>No orders found</p>';
+                        return;
+                    }
+
+                    let html = '<table class="table table-striped align-middle">';
+                    html += '<thead><tr><th>ID</th><th>Order #</th><th>Customer</th><th>Status</th><th>Shipping</th><th>Actions</th></tr></thead><tbody>';
+
+                    data.forEach(order => {
+                        const shipStatus = shippingState[order.id] || 'pending';
+                        html += `<tr>
+                            <td>${order.id}</td>
+                            <td>${order.order_number || '-'}</td>
+                            <td>${order.customer_name || '-'}</td>
+                            <td>${order.status || '-'}</td>
+                            <td>${shippingBadge(shipStatus)}</td>
+                            <td class="d-flex gap-2 flex-wrap">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="setShippingStatus(${order.id}, 'pending')">Reset</button>
+                                <button class="btn btn-sm btn-outline-warning" ${shipStatus !== 'pending' ? '' : ''} onclick="setShippingStatus(${order.id}, 'ready_to_ship')">Ready</button>
+                                <button class="btn btn-sm btn-outline-info" onclick="setShippingStatus(${order.id}, 'shipped')">Ship</button>
+                                <button class="btn btn-sm btn-outline-success" onclick="setShippingStatus(${order.id}, 'delivered')">Deliver</button>
+                            </td>
+                        </tr>`;
+                    });
+
+                    html += '</tbody></table>';
+                    ordersList.innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById('orders-list').innerHTML = '<p>Error loading orders</p>';
+                    console.error('Error loading orders', err);
+                });
+        }
 
         function handlePlanSubmit(e) {
             e.preventDefault();

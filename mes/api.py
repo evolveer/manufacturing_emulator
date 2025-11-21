@@ -163,6 +163,7 @@ class WorkOrderStatusAPI(Resource):
                     # Push finished goods into ERP product stock
                     qty = work_order.get('quantity', 0)
                     product_id = work_order.get('product_id')
+                    production_plan_id = work_order.get('production_plan_id')
                     if product_id and qty:
                         resp = requests.put(
                             f"{ERP_API_URL}/products/{product_id}/stock",
@@ -170,10 +171,27 @@ class WorkOrderStatusAPI(Resource):
                                 'quantity_change': qty,
                                 'transaction_type': 'production_output'
                             }
-                        )
+                            )
                         if resp.status_code >= 400:
                             return {'error': f"ERP stock update failed ({resp.status_code})"}, 500
                         WorkOrderService.mark_inventory_posted(work_order_id)
+                    if production_plan_id:
+                        try:
+                            requests.put(
+                                f"{ERP_API_URL}/production-plans/{production_plan_id}",
+                                json={'status': 'completed'}
+                            )
+                        except Exception as plan_err:
+                            print(f"Failed to update production plan {production_plan_id} status: {plan_err}")
+                    # Mark ERP order as completed/ready
+                    if existing.get('order_id'):
+                        try:
+                            requests.put(
+                                f"{ERP_API_URL}/orders/{existing.get('order_id')}/status",
+                                json={'status': 'completed'}
+                            )
+                        except Exception as order_err:
+                            print(f"Failed to update ERP order {existing.get('order_id')} status: {order_err}")
                 except Exception as e:
                     # Log but don't fail the status update
                     print(f"Material consumption error for WO {work_order_id}: {e}")
@@ -199,6 +217,8 @@ class WorkOrderStockInAPI(Resource):
 
             product_id = work_order.get('product_id')
             quantity = work_order.get('quantity', 0)
+            production_plan_id = work_order.get('production_plan_id')
+            order_id = work_order.get('order_id')
             if not product_id or quantity is None:
                 return {'error': 'Missing product or quantity'}, 400
 
@@ -220,6 +240,22 @@ class WorkOrderStockInAPI(Resource):
                 return {'error': f"ERP stock update failed ({resp.status_code})"}, 500
 
             WorkOrderService.mark_inventory_posted(work_order_id)
+            if production_plan_id:
+                try:
+                    requests.put(
+                        f"{ERP_API_URL}/production-plans/{production_plan_id}",
+                        json={'status': 'completed'}
+                    )
+                except Exception as plan_err:
+                    print(f"Failed to update production plan {production_plan_id} status: {plan_err}")
+            if order_id:
+                try:
+                    requests.put(
+                        f"{ERP_API_URL}/orders/{order_id}/status",
+                        json={'status': 'completed'}
+                    )
+                except Exception as order_err:
+                    print(f"Failed to update ERP order {order_id} status: {order_err}")
             return {'message': 'Stock updated in ERP', 'product_id': product_id, 'quantity': quantity}, 200
         except Exception as e:
             return {'error': str(e)}, 500

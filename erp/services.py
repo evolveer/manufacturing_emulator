@@ -3,10 +3,13 @@ ERP Emulator - Service Layer
 Provides business logic for the ERP emulator
 """
 from datetime import datetime
+import logging
 import uuid
 from sqlalchemy.exc import SQLAlchemyError
 from database import get_db_session, close_db_session
 from models import Material, Product, BOMItem, Order, OrderItem, ProductionPlan, MaterialTransaction
+
+logger = logging.getLogger(__name__)
 
 class MaterialService:
     """Service for material management"""
@@ -119,6 +122,10 @@ class MaterialService:
                 qty_change = abs(qty_change)
 
             material.stock_quantity += qty_change
+            logger.info(
+                "Material stock update: id=%s change=%s -> new_stock=%s txn_type=%s",
+                material_id, qty_change, material.stock_quantity, txn_type or transaction_type
+            )
             
             # Check if stock is below minimum level
             is_below_min = material.stock_quantity < material.min_stock_level
@@ -671,6 +678,7 @@ class ProductionPlanService:
 
         unavailable_materials = ProductionPlanService._find_unavailable_materials(session, materials_needed)
         if unavailable_materials:
+            logger.info("Material reservation failed for order %s shortages=%s", order_id, unavailable_materials)
             return {
                 'success': False,
                 'message': 'Some materials are not available in sufficient quantity',
@@ -681,6 +689,10 @@ class ProductionPlanService:
             material = session.query(Material).filter(Material.id == material_id).first()
             if material:
                 material.stock_quantity -= quantity_needed
+                logger.info(
+                    "Reserved material id=%s qty=%s for order=%s new_stock=%s",
+                    material_id, quantity_needed, order_id, material.stock_quantity
+                )
 
         return {
             'success': True,
@@ -702,6 +714,10 @@ class ProductionPlanService:
             material = session.query(Material).filter(Material.id == material_id).first()
             if material:
                 material.stock_quantity += quantity
+                logger.info(
+                    "Released material id=%s qty=%s for order=%s new_stock=%s",
+                    material_id, quantity, order_id, material.stock_quantity
+                )
 
         return {
             'success': True,

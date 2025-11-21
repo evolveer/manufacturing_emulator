@@ -297,7 +297,8 @@
             planId: null,
             workOrderId: null,
             machineId: null,
-            currentStep: 1
+            currentStep: 1,
+            productionComplete: false
         };
 
         function saveState() {
@@ -318,7 +319,8 @@
                     planId: saved.planId ?? null,
                     workOrderId: saved.workOrderId ?? null,
                     machineId: saved.machineId ?? null,
-                    currentStep: saved.currentStep ?? 1
+                    currentStep: saved.currentStep ?? 1,
+                    productionComplete: saved.productionComplete ?? false
                 };
                 if (saved.logHtml) {
                     document.getElementById('workflowLog').innerHTML = saved.logHtml;
@@ -398,7 +400,8 @@
                     planId: null,
                     workOrderId: null,
                     machineId: null,
-                    currentStep: 1
+                    currentStep: 1,
+                    productionComplete: false
                 };
                 
                 for (let i = 1; i <= 7; i++) {
@@ -494,7 +497,9 @@
                     // Reserve materials immediately after planning
                     try {
                         const reserveResp = await fetch(`/api/erp/orders/${workflowState.orderId}/reserve-materials`, {
-                            method: 'POST'
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({})
                         });
                         const reserveData = await reserveResp.json();
                         if (reserveResp.ok && reserveData.success !== false) {
@@ -644,6 +649,7 @@
                     log(`Production started on machine ${workflowState.machineId}`, 'success');
                     workflowState.currentStep = 6;
                     setStepStatus(6, 'active');
+                    workflowState.productionComplete = false;
                     startProductionMonitoring();
                     saveState();
                 } else {
@@ -659,6 +665,9 @@
         let monitoringInterval = null;
         function startProductionMonitoring() {
             log('Production monitoring started', 'info');
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+            }
             
             monitoringInterval = setInterval(async () => {
                 try {
@@ -686,7 +695,7 @@
                         document.getElementById('productionStatus').innerHTML = statusHtml;
                         
                         // Check if production is complete
-                        if (machineStatus.cycle_count >= parseInt(document.getElementById('quantity').value)) {
+                        if (!workflowState.productionComplete && machineStatus.cycle_count >= parseInt(document.getElementById('quantity').value)) {
                             clearInterval(monitoringInterval);
                             setStepStatus(6, 'completed');
                             showResult(6, 'Production completed!');
@@ -694,6 +703,7 @@
                             document.getElementById('completeOrderBtn').disabled = false;
                             workflowState.currentStep = 7;
                             setStepStatus(7, 'active');
+                            workflowState.productionComplete = true;
                             saveState();
                         }
                     }
