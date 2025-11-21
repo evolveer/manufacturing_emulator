@@ -54,12 +54,6 @@ def status():
     return {'status': 'ok', 'service': 'ERP'}, 200
 
 
-#masterdata page
-# Serve static files
-@app.route('/static/<path:path>')
-def send_static(path):
-    return send_from_directory('static', path)
-
 # Serve master data management interface
 @app.route('/master_data')
 def master_data_page():
@@ -476,6 +470,8 @@ class ProductionPlanListAPI(Resource):
                 return {'error': 'No data provided'}, 400
             
             plan = ProductionPlanService.create_production_plan(plan_data)
+            if not plan or (isinstance(plan, dict) and plan.get('success') is False):
+                return plan or {'error': 'Failed to create production plan'}, 400
             return plan, 201
         except Exception as e:
             return {'error': str(e)}, 500
@@ -502,6 +498,8 @@ class ProductionPlanAPI(Resource):
             plan = ProductionPlanService.update_production_plan(plan_id, plan_data)
             if not plan:
                 return {'error': 'Production plan not found'}, 404
+            if isinstance(plan, dict) and plan.get('success') is False:
+                return plan, 400
             
             return plan
         except Exception as e:
@@ -543,6 +541,8 @@ class ProductionPlanFromOrderAPI(Resource):
             }
 
             plan = ProductionPlanService.create_production_plan(plan_data)
+            if not plan or (isinstance(plan, dict) and plan.get('success') is False):
+                return plan or {'error': 'Failed to create production plan'}, 400
             return plan, 201
 
         except Exception as e:
@@ -583,6 +583,7 @@ api.add_resource(ProductListAPI, f'{API_PREFIX}/products')
 api.add_resource(ProductAPI, f'{API_PREFIX}/products/<int:product_id>')
 api.add_resource(ProductByCodeAPI, f'{API_PREFIX}/products/code/<string:code>')
 api.add_resource(ProductBOMAPI, f'{API_PREFIX}/products/<int:product_id>/bom')
+api.add_resource(ProductStockAPI, f'{API_PREFIX}/products/<int:product_id>/stock')
 
 api.add_resource(ProductBOMItemAPI, f'{API_PREFIX}/products/<int:product_id>/bom/<int:material_id>')
 

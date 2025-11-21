@@ -4,6 +4,7 @@ Provides REST API endpoints for the MES emulator
 """
 import os
 import yaml
+import requests
 from flask import Flask, request, jsonify
 from flask_restful import Api, Resource
 from services import (
@@ -140,11 +141,86 @@ class WorkOrderStatusAPI(Resource):
             if not data or 'status' not in data:
                 return {'error': 'No status provided'}, 400
             
-            work_order = WorkOrderService.update_work_order_status(work_order_id, data['status'])
+            new_status = data['status']
+            existing = WorkOrderService.get_work_order_by_id(work_order_id)
+            if not existing:
+                return {'error': 'Work order not found'}, 404
+
+            work_order = WorkOrderService.update_work_order_status(work_order_id, new_status)
             if not work_order:
                 return {'error': 'Work order not found'}, 404
+
+            # On completion: ensure materials are consumed in ERP based on BOM allocations
+            should_post_inventory = (
+                new_status == 'completed'
+                and existing.get('status') != 'completed'
+                and not existing.get('inventory_posted')
+            )
+            if should_post_inventory:
+                try:
+                    allocations = MaterialTrackingService.allocate_materials_for_work_order(work_order_id, ERP_API_URL)
+                    MaterialTrackingService.consume_materials_for_work_order(work_order_id, ERP_API_URL)
+                    # Push finished goods into ERP product stock
+                    qty = work_order.get('quantity', 0)
+                    product_id = work_order.get('product_id')
+                    if product_id and qty:
+                        resp = requests.put(
+                            f"{ERP_API_URL}/products/{product_id}/stock",
+                            json={
+                                'quantity_change': qty,
+                                'transaction_type': 'production_output'
+                            }
+                        )
+                        if resp.status_code >= 400:
+                            return {'error': f"ERP stock update failed ({resp.status_code})"}, 500
+                        WorkOrderService.mark_inventory_posted(work_order_id)
+                except Exception as e:
+                    # Log but don't fail the status update
+                    print(f"Material consumption error for WO {work_order_id}: {e}")
             
             return work_order
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+class WorkOrderStockInAPI(Resource):
+    def post(self, work_order_id):
+        """Post finished goods to ERP stock for a completed work order"""
+        try:
+            work_order = WorkOrderService.get_work_order_by_id(work_order_id)
+            if not work_order:
+                return {'error': 'Work order not found'}, 404
+
+            if work_order.get('inventory_posted'):
+                return {'error': 'Inventory already posted for this work order'}, 400
+
+            # Ensure completed
+            if work_order.get('status') != 'completed':
+                return {'error': 'Work order is not completed'}, 400
+
+            product_id = work_order.get('product_id')
+            quantity = work_order.get('quantity', 0)
+            if not product_id or quantity is None:
+                return {'error': 'Missing product or quantity'}, 400
+
+            # Ensure materials are consumed once
+            try:
+                allocations = MaterialTrackingService.allocate_materials_for_work_order(work_order_id, ERP_API_URL)
+                MaterialTrackingService.consume_materials_for_work_order(work_order_id, ERP_API_URL)
+            except Exception as e:
+                print(f"Material consumption error on stock-in for WO {work_order_id}: {e}")
+
+            resp = requests.put(
+                f"{ERP_API_URL}/products/{product_id}/stock",
+                json={
+                    'quantity_change': quantity,
+                    'transaction_type': 'production_output'
+                }
+            )
+            if resp.status_code >= 400:
+                return {'error': f"ERP stock update failed ({resp.status_code})"}, 500
+
+            WorkOrderService.mark_inventory_posted(work_order_id)
+            return {'message': 'Stock updated in ERP', 'product_id': product_id, 'quantity': quantity}, 200
         except Exception as e:
             return {'error': str(e)}, 500
 
@@ -841,6 +917,7 @@ api.add_resource(WorkOrderListAPI, f'{API_PREFIX}/work-orders')
 api.add_resource(WorkOrderAPI, f'{API_PREFIX}/work-orders/<int:work_order_id>')
 api.add_resource(WorkOrderByNumberAPI, f'{API_PREFIX}/work-orders/number/<string:work_order_number>')
 api.add_resource(WorkOrderStatusAPI, f'{API_PREFIX}/work-orders/<int:work_order_id>/status')
+api.add_resource(WorkOrderStockInAPI, f'{API_PREFIX}/work-orders/<int:work_order_id>/put-in-stock')
 api.add_resource(WorkOrdersByMachineAPI, f'{API_PREFIX}/machines/<int:machine_id>/work-orders')
 api.add_resource(ActiveWorkOrdersAPI, f'{API_PREFIX}/work-orders/active')
 api.add_resource(CompletedWorkOrdersAPI, f'{API_PREFIX}/work-orders/completed')

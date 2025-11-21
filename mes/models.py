@@ -22,6 +22,7 @@ class WorkOrder(Base):
     start_time = Column(DateTime)
     end_time = Column(DateTime)
     machine_id = Column(Integer, ForeignKey('machines.id'))
+    inventory_posted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
@@ -45,6 +46,7 @@ class WorkOrder(Base):
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'machine_id': self.machine_id,
             'machine_code': self.machine.machine_code if self.machine else None,
+            'inventory_posted': self.inventory_posted,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

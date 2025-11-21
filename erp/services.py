@@ -94,9 +94,31 @@ class MaterialService:
             material = session.query(Material).filter(Material.id == material_id).first()
             if not material:
                 return None
-            
-            # Update stock quantity
-            material.stock_quantity += quantity_change
+
+            # Normalize sign so consumption-style transactions always reduce stock
+            qty_change = float(quantity_change)
+            txn_type = (transaction_type or "").strip().lower()
+            consumption_types = {
+                'consumption',
+                'consume',
+                'production_consumption',
+                'allocation',
+                'alloc',
+                'reserve',
+                'reservation',
+                'material_reservation',
+                'issue',
+                'usage',
+                'use'
+            }
+            addition_types = {'production', 'production_output', 'receipt', 'return', 'adjustment_in'}
+
+            if txn_type in consumption_types:
+                qty_change = -abs(qty_change)
+            elif txn_type in addition_types:
+                qty_change = abs(qty_change)
+
+            material.stock_quantity += qty_change
             
             # Check if stock is below minimum level
             is_below_min = material.stock_quantity < material.min_stock_level
@@ -604,6 +626,91 @@ class ProductionPlanService:
             # date object -> datetime at midnight
             return datetime(value.year, value.month, value.day)
         return None
+
+    @staticmethod
+    def _calculate_materials_needed(session, order_id):
+        """Return aggregated materials needed for an order and whether items exist"""
+        order_items = session.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        if not order_items:
+            return {}, False
+
+        materials_needed = {}
+        for order_item in order_items:
+            bom_items = session.query(BOMItem).filter(BOMItem.product_id == order_item.product_id).all()
+            for bom_item in bom_items:
+                material_id = bom_item.material_id
+                material_quantity = bom_item.quantity * order_item.quantity
+                materials_needed[material_id] = materials_needed.get(material_id, 0) + material_quantity
+
+        return materials_needed, True
+
+    @staticmethod
+    def _find_unavailable_materials(session, materials_needed):
+        """Return list of shortage details if any material is short"""
+        unavailable_materials = []
+        for material_id, quantity_needed in materials_needed.items():
+            material = session.query(Material).filter(Material.id == material_id).first()
+            available_qty = material.stock_quantity if material else 0
+            if available_qty < quantity_needed:
+                unavailable_materials.append({
+                    'material_id': material_id,
+                    'material_code': material.code if material else None,
+                    'material_name': material.name if material else None,
+                    'available': available_qty,
+                    'needed': quantity_needed,
+                    'shortage': quantity_needed - available_qty
+                })
+        return unavailable_materials
+
+    @staticmethod
+    def _reserve_materials_for_order(session, order_id):
+        """Internal helper to reserve materials for an order using an existing session"""
+        materials_needed, has_items = ProductionPlanService._calculate_materials_needed(session, order_id)
+        if not has_items:
+            return {'success': False, 'message': 'No items in order'}
+
+        unavailable_materials = ProductionPlanService._find_unavailable_materials(session, materials_needed)
+        if unavailable_materials:
+            return {
+                'success': False,
+                'message': 'Some materials are not available in sufficient quantity',
+                'unavailable_materials': unavailable_materials
+            }
+
+        for material_id, quantity_needed in materials_needed.items():
+            material = session.query(Material).filter(Material.id == material_id).first()
+            if material:
+                material.stock_quantity -= quantity_needed
+
+        return {
+            'success': True,
+            'message': 'Materials reserved successfully',
+            'materials_reserved': [
+                {'material_id': material_id, 'quantity': quantity}
+                for material_id, quantity in materials_needed.items()
+            ]
+        }
+
+    @staticmethod
+    def _release_materials_for_order(session, order_id):
+        """Internal helper to release previously reserved materials back to stock"""
+        materials_needed, has_items = ProductionPlanService._calculate_materials_needed(session, order_id)
+        if not has_items:
+            return {'success': False, 'message': 'No items in order'}
+
+        for material_id, quantity in materials_needed.items():
+            material = session.query(Material).filter(Material.id == material_id).first()
+            if material:
+                material.stock_quantity += quantity
+
+        return {
+            'success': True,
+            'message': 'Materials released successfully',
+            'materials_released': [
+                {'material_id': material_id, 'quantity': quantity}
+                for material_id, quantity in materials_needed.items()
+            ]
+        }
     
     @staticmethod
     def get_all_production_plans():
@@ -656,16 +763,26 @@ class ProductionPlanService:
                 end_date=end_dt
             )
             session.add(plan)
-            session.commit()
+
+            reservation_result = None
+            if plan.order_id and plan.status == 'planned':
+                reservation_result = ProductionPlanService._reserve_materials_for_order(session, plan.order_id)
+                if not reservation_result.get('success'):
+                    session.rollback()
+                    return reservation_result
             
             # If plan is created from an order, update order status
             if plan.order_id:
                 order = session.query(Order).filter(Order.id == plan.order_id).first()
                 if order and order.status == 'confirmed':
                     order.status = 'in_production'
-                    session.commit()
             
-            return plan.to_dict()
+            session.commit()
+
+            plan_dict = plan.to_dict()
+            if reservation_result:
+                plan_dict['material_reservation'] = reservation_result
+            return plan_dict
         except SQLAlchemyError as e:
             session.rollback()
             raise e
@@ -680,6 +797,7 @@ class ProductionPlanService:
             plan = session.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
             if not plan:
                 return None
+            previous_status = plan.status
             
             # Update fields
             for key, value in plan_data.items():
@@ -690,6 +808,14 @@ class ProductionPlanService:
                 elif hasattr(plan, key):
                     setattr(plan, key, value)
             
+            # Auto-reserve materials when a plan is moved into planned status
+            reservation_result = None
+            if plan.order_id and previous_status != 'planned' and plan.status == 'planned':
+                reservation_result = ProductionPlanService._reserve_materials_for_order(session, plan.order_id)
+                if not reservation_result.get('success'):
+                    session.rollback()
+                    return reservation_result
+
             session.commit()
             
             # Update order status if plan status changes
@@ -701,8 +827,11 @@ class ProductionPlanService:
                     elif plan.status == 'cancelled' and order.status == 'in_production':
                         order.status = 'confirmed'  # Revert to confirmed status
                     session.commit()
-            
-            return plan.to_dict()
+
+            plan_dict = plan.to_dict()
+            if reservation_result:
+                plan_dict['material_reservation'] = reservation_result
+            return plan_dict
         except SQLAlchemyError as e:
             session.rollback()
             raise e
@@ -717,6 +846,9 @@ class ProductionPlanService:
             plan = session.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
             if not plan:
                 return False
+
+            if plan.order_id:
+                ProductionPlanService._release_materials_for_order(session, plan.order_id)
             
             # Update order status if plan is deleted
             if plan.order_id:
@@ -759,12 +891,19 @@ class ProductionPlanService:
                 end_date=end_date
             )
             session.add(plan)
-            
+
+            reservation_result = ProductionPlanService._reserve_materials_for_order(session, order_id)
+            if not reservation_result.get('success'):
+                session.rollback()
+                return reservation_result
+
             # Update order status
             order.status = 'in_production'
             
             session.commit()
-            return plan.to_dict()
+            plan_dict = plan.to_dict()
+            plan_dict['material_reservation'] = reservation_result
+            return plan_dict
         except SQLAlchemyError as e:
             session.rollback()
             raise e
@@ -776,46 +915,11 @@ class ProductionPlanService:
         """Check if materials are available for an order"""
         session = get_db_session()
         try:
-            # Get order items
-            order_items = session.query(OrderItem).filter(OrderItem.order_id == order_id).all()
-            if not order_items:
+            materials_needed, has_items = ProductionPlanService._calculate_materials_needed(session, order_id)
+            if not has_items:
                 return {'available': False, 'message': 'No items in order'}
-            
-            # Check material availability for each product in the order
-            materials_needed = {}
-            
-            for order_item in order_items:
-                product_id = order_item.product_id
-                quantity = order_item.quantity
-                
-                # Get BOM items for the product
-                bom_items = session.query(BOMItem).filter(BOMItem.product_id == product_id).all()
-                
-                for bom_item in bom_items:
-                    material_id = bom_item.material_id
-                    material_quantity = bom_item.quantity * quantity
-                    
-                    if material_id in materials_needed:
-                        materials_needed[material_id] += material_quantity
-                    else:
-                        materials_needed[material_id] = material_quantity
-            
-            # Check if materials are available in stock
-            unavailable_materials = []
-            
-            for material_id, quantity_needed in materials_needed.items():
-                material = session.query(Material).filter(Material.id == material_id).first()
-                
-                if material.stock_quantity < quantity_needed:
-                    unavailable_materials.append({
-                        'material_id': material_id,
-                        'material_code': material.code,
-                        'material_name': material.name,
-                        'available': material.stock_quantity,
-                        'needed': quantity_needed,
-                        'shortage': quantity_needed - material.stock_quantity
-                    })
-            
+
+            unavailable_materials = ProductionPlanService._find_unavailable_materials(session, materials_needed)
             if unavailable_materials:
                 return {
                     'available': False,
@@ -841,49 +945,12 @@ class ProductionPlanService:
         """Reserve materials for an order"""
         session = get_db_session()
         try:
-            # Check material availability
-            availability = ProductionPlanService.check_material_availability(order_id)
-            if not availability['available']:
-                return availability
-            
-            # Get order items
-            order_items = session.query(OrderItem).filter(OrderItem.order_id == order_id).all()
-            
-            # Calculate materials needed
-            materials_needed = {}
-            
-            for order_item in order_items:
-                product_id = order_item.product_id
-                quantity = order_item.quantity
-                
-                # Get BOM items for the product
-                bom_items = session.query(BOMItem).filter(BOMItem.product_id == product_id).all()
-                
-                for bom_item in bom_items:
-                    material_id = bom_item.material_id
-                    material_quantity = bom_item.quantity * quantity
-                    
-                    if material_id in materials_needed:
-                        materials_needed[material_id] += material_quantity
-                    else:
-                        materials_needed[material_id] = material_quantity
-            
-            # Reserve materials (reduce stock)
-            for material_id, quantity_needed in materials_needed.items():
-                material = session.query(Material).filter(Material.id == material_id).first()
-                material.stock_quantity -= quantity_needed
-            
-            session.commit()
-            return {
-                'success': True,
-                'message': 'Materials reserved successfully',
-                'materials_reserved': [
-                    {
-                        'material_id': material_id,
-                        'quantity': quantity
-                    } for material_id, quantity in materials_needed.items()
-                ]
-            }
+            reservation_result = ProductionPlanService._reserve_materials_for_order(session, order_id)
+            if reservation_result.get('success'):
+                session.commit()
+            else:
+                session.rollback()
+            return reservation_result
         except SQLAlchemyError as e:
             session.rollback()
             raise e

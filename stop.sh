@@ -2,8 +2,7 @@
 
 echo "Stopping Manufacturing Emulator System..."
 
-cd /home/ubuntu/manufacturing_emulator
-
+cd ./
 # Function to stop a service
 stop_service() {
     local pid_file=$1
@@ -28,6 +27,7 @@ stop_service "logs/interface.pid" "Unified Interface"
 stop_service "logs/pcs.pid" "PCS Service"
 stop_service "logs/mes.pid" "MES Service"
 stop_service "logs/erp.pid" "ERP Service"
+
 
 echo ""
 echo "=================================================="

@@ -110,7 +110,24 @@ class WorkOrderService:
             raise e
         finally:
             close_db_session(session)
-    
+
+    @staticmethod
+    def mark_inventory_posted(work_order_id):
+        """Flag a work order as already posted to ERP inventory"""
+        session = get_db_session()
+        try:
+            work_order = session.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
+            if not work_order:
+                return None
+            work_order.inventory_posted = True
+            session.commit()
+            return work_order.to_dict()
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise e
+        finally:
+            close_db_session(session)
+
     @staticmethod
     def update_work_order_status(work_order_id, status):
         """Update work order status"""
@@ -326,7 +343,7 @@ class MachineService:
             raise e
         finally:
             close_db_session(session)
-    
+
     @staticmethod
     def update_machine_status(machine_id, status):
         """Update machine status"""
@@ -595,6 +612,25 @@ class ProductionPlanService:
     """Service for handling production plans in MES"""
 
     @staticmethod
+    def _parse_datetime(value):
+        """Convert incoming values (string/date/datetime) to datetime or None"""
+        if value is None:
+            return None
+        if isinstance(value, datetime.datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                # Allow YYYY-MM-DD by appending midnight
+                if len(value) == 10:
+                    return datetime.datetime.fromisoformat(value + "T00:00:00")
+                return datetime.datetime.fromisoformat(value)
+            except ValueError:
+                return None
+        if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
+            return datetime.datetime(value.year, value.month, value.day)
+        return None
+
+    @staticmethod
     def get_all_plans():
         session = get_db_session()
         try:
@@ -620,8 +656,8 @@ class ProductionPlanService:
                 plan_number=data['plan_number'],
                 order_id=data.get('order_id'),
                 status=data.get('status', 'planned'),
-                start_date=data.get('start_date'),
-                end_date=data.get('end_date'),
+                start_date=ProductionPlanService._parse_datetime(data.get('start_date')),
+                end_date=ProductionPlanService._parse_datetime(data.get('end_date')),
                 created_at=datetime.datetime.utcnow(),
                 updated_at=datetime.datetime.utcnow()
             )
@@ -643,7 +679,11 @@ class ProductionPlanService:
                 return None
 
             for key, value in data.items():
-                if hasattr(plan, key):
+                if not hasattr(plan, key):
+                    continue
+                if key in ['start_date', 'end_date']:
+                    setattr(plan, key, ProductionPlanService._parse_datetime(value))
+                elif key not in ['id', 'created_at']:
                     setattr(plan, key, value)
 
             plan.updated_at = datetime.datetime.utcnow()
@@ -1074,12 +1114,29 @@ class MaterialTrackingService:
         """Consume materials for a work order and update ERP inventory"""
         session = get_db_session()
         try:
+            # Skip if already consumed
+            existing_consumption = session.query(MaterialTracking).filter(
+                MaterialTracking.work_order_id == work_order_id,
+                MaterialTracking.transaction_type == 'consumption'
+            ).first()
+            if existing_consumption:
+                return []
+
             # Get material allocations
             allocations = session.query(MaterialTracking).filter(
                 MaterialTracking.work_order_id == work_order_id,
                 MaterialTracking.transaction_type == 'allocation'
             ).all()
-            
+
+            # If no allocations exist yet, create them from BOM now
+            if not allocations:
+                allocs = MaterialTrackingService.allocate_materials_for_work_order(work_order_id, erp_api_url)
+                # reload from DB to ensure ids are present
+                allocations = session.query(MaterialTracking).filter(
+                    MaterialTracking.work_order_id == work_order_id,
+                    MaterialTracking.transaction_type == 'allocation'
+                ).all()
+
             if not allocations:
                 return None
             

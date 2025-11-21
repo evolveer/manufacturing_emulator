@@ -35,8 +35,8 @@ class InjectionMoldingMachine:
         'idle': 0,
         'mold_close': 2,
         'injection': 3,
-        'packing': 5,
-        'cooling': 15,
+        'packing': 4,
+        'cooling': 10,
         'mold_open': 2,
         'part_ejection': 3
     }
