@@ -55,6 +55,8 @@ class Product(Base):
     description = Column(Text)
     category = Column(String)
     price = Column(Float, nullable=False)
+    stock_quantity = Column(Float, nullable=False, default=0)
+    min_stock_level = Column(Float, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
@@ -73,6 +75,8 @@ class Product(Base):
             'description': self.description,
             'category': self.category,
             'price': self.price,
+            'stock_quantity': self.stock_quantity,
+            'min_stock_level': self.min_stock_level,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -104,7 +108,19 @@ class BOMItem(Base):
             'material_id': self.material_id,
             'quantity': self.quantity,
             'product_code': self.product.code if self.product else None,
-            'material_code': self.material.code if self.material else None
+            'product': {
+                'id': self.product.id,
+                'code': self.product.code,
+                'name': self.product.name
+            } if self.product else None,
+            'material_code': self.material.code if self.material else None,
+            'material': {
+                'id': self.material.id,
+                'code': self.material.code,
+                'name': self.material.name,
+                'unit': self.material.unit
+            } if self.material else None,
+            'unit': self.material.unit if self.material else None
         }
 
 

@@ -206,7 +206,9 @@ class ProductService:
                 name=product_data['name'],
                 description=product_data.get('description'),
                 category=product_data.get('category'),
-                price=product_data['price']
+                price=product_data['price'],
+                stock_quantity=product_data.get('stock_quantity', 0),
+                min_stock_level=product_data.get('min_stock_level', 0)
             )
             session.add(product)
             session.commit()
@@ -251,6 +253,29 @@ class ProductService:
             session.delete(product)
             session.commit()
             return True
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise e
+        finally:
+            close_db_session(session)
+
+    @staticmethod
+    def update_product_stock(product_id, quantity_change, transaction_type='production'):
+        """Update product stock quantity"""
+        session = get_db_session()
+        try:
+            product = session.query(Product).filter(Product.id == product_id).first()
+            if not product:
+                return None
+
+            product.stock_quantity += quantity_change
+            below_min = product.stock_quantity < product.min_stock_level
+            session.commit()
+            return {
+                'product': product.to_dict(),
+                'is_below_min': below_min,
+                'transaction_type': transaction_type
+            }
         except SQLAlchemyError as e:
             session.rollback()
             raise e

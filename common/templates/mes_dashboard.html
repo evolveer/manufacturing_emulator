@@ -144,13 +144,16 @@
                         const status = (workOrder.status || '').toLowerCase();
                         const needsPlanning = !status || !['planned', 'in_progress', 'completed', 'cancelled'].includes(status);
                         const canStart = status === 'planned';
-                        const disabled = ['in_progress', 'completed', 'cancelled'].includes(status);
+                        const disabled = ['in_progress', 'cancelled'].includes(status);
 
                         let actionLabel = 'Start';
                         let nextStatus = 'in_progress';
                         if (needsPlanning) {
                             actionLabel = 'Plan';
                             nextStatus = 'planned';
+                        }
+                        if (status === 'completed') {
+                            actionLabel = 'Put in Stock';
                         }
 
                         const machineOptions = machinesCache.map(m => `<option value="${m.id}" ${workOrder.machine_id === m.id ? 'selected' : ''}>${m.name || 'Machine'} ${m.id}</option>`).join('');
@@ -169,9 +172,12 @@
                             <td>${workOrder.status || '-'}</td>
                             <td>${machineCell}</td>
                             <td>
-                                <button class="btn btn-sm btn-primary" onclick="updateWorkOrderStatus(${workOrder.id}, '${nextStatus}', ${machineArg})" ${disabled ? 'disabled' : ''}>
-                                    ${actionLabel}
-                                </button>
+                                ${status === 'completed'
+                                    ? `<button class="btn btn-sm btn-success" onclick="putInStock(${workOrder.id}, ${workOrder.product_id}, ${workOrder.quantity})">Put in Stock</button>`
+                                    : `<button class="btn btn-sm btn-primary" onclick="updateWorkOrderStatus(${workOrder.id}, '${nextStatus}', ${machineArg})" ${disabled ? 'disabled' : ''}>
+                                        ${actionLabel}
+                                       </button>`
+                                }
                             </td>
                         </tr>`;
                     });
@@ -217,6 +223,21 @@
             } catch (err) {
                 alert(err.message);
                 console.error('Error updating work order:', err);
+            }
+        }
+
+        async function putInStock(workOrderId, productId, quantity) {
+            try {
+                const resp = await fetch(`/api/mes/work-orders/${workOrderId}/put-in-stock`, {
+                    method: 'POST'
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.error || 'Failed to post to stock');
+                alert(`Added ${quantity} of product ${productId} to ERP stock.`);
+                await loadWorkOrders();
+            } catch (err) {
+                alert(err.message);
+                console.error('Error putting in stock:', err);
             }
         }
             

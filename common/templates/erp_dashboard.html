@@ -165,15 +165,16 @@
                     }
                     
                     let html = '<table class="table table-striped">';
-                    html += '<thead><tr><th>ID</th><th>Name</th><th>Quantity</th><th>Unit</th></tr></thead>';
+                    html += '<thead><tr><th>ID</th><th>Name</th><th>Stock</th><th>Min Level</th><th>Unit</th></tr></thead>';
                     html += '<tbody>';
                     
                     data.forEach(material => {
                         html += `<tr>
                             <td>${material.id}</td>
                             <td>${material.name}</td>
-                            <td>${material.quantity}</td>
-                            <td>${material.unit}</td>
+                            <td>${material.stock_quantity ?? material.quantity ?? 0}</td>
+                            <td>${material.min_stock_level ?? '-'}</td>
+                            <td>${material.unit || '-'}</td>
                         </tr>`;
                     });
                     
@@ -197,7 +198,7 @@
                     }
                     
                     let html = '<table class="table table-striped">';
-                    html += '<thead><tr><th>ID</th><th>Name</th><th>Description</th></tr></thead>';
+                    html += '<thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Stock</th><th>Min Level</th></tr></thead>';
                     html += '<tbody>';
                     
                     data.forEach(product => {
@@ -205,6 +206,8 @@
                             <td>${product.id}</td>
                             <td>${product.name}</td>
                             <td>${product.description || ''}</td>
+                            <td>${product.stock_quantity ?? 0}</td>
+                            <td>${product.min_stock_level ?? '-'}</td>
                         </tr>`;
                     });
                     
@@ -234,14 +237,16 @@
                     };
 
                     let html = '<table class="table table-striped">';
-                    html += '<thead><tr><th>ID</th><th>Plan #</th><th>Order</th><th>Status</th><th>Start</th><th>End</th></tr></thead>';
+                    html += '<thead><tr><th>ID</th><th>Plan #</th><th>Order</th><th>Product</th><th>Status</th><th>Start</th><th>End</th></tr></thead>';
                     html += '<tbody>';
 
                     data.forEach(plan => {
+                        const product = plan.product_name || plan.product_id || '-';
                         html += `<tr>
                             <td>${plan.id ?? '-'}</td>
                             <td>${plan.plan_number || '-'}</td>
                             <td>${plan.order_id ?? '-'}</td>
+                            <td>${product}</td>
                             <td>${plan.status || '-'}</td>
                             <td>${safeDate(plan.start_date)}</td>
                             <td>${safeDate(plan.end_date)}</td>

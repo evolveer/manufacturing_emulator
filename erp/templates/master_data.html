@@ -347,6 +347,7 @@
                                         <th>Product</th>
                                         <th>Quantity</th>
                                         <th>Due Date</th>
+                                        <th>Inventory</th>
                                         <th>Status</th>
                                         <th>Actions</th>
                                     </tr>
@@ -529,7 +530,10 @@
         productionPlanForm.addEventListener('submit', createProductionPlan);
         
         // BOM product filter
-        document.getElementById('bomProductFilter').addEventListener('change', filterBOM);
+        document.getElementById('bomProductFilter').addEventListener('change', (e) => {
+            const val = e.target.value;
+            loadBOM(val || null);
+        });
         
         // Initialize data on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -825,7 +829,7 @@
         // ===== Bill of Materials Functions =====
         
         // Load BOM
-        function loadBOM() {
+        function loadBOM(productId = null) {
             bomLoading.style.display = 'block';
             bomList.innerHTML = '';
             
@@ -836,72 +840,83 @@
             // Load materials for dropdown
             loadMaterialsForDropdown('bomMaterial');
             
-            fetch(`${API_BASE_URL}/bom`)
-                .then(response => response.json())
-                .then(data => {
+            // If a specific product is selected, fetch only its BOM
+            const bomPromise = productId
+                ? Promise.all([
+                    fetch(`${API_BASE_URL}/products/${productId}`).then(r => r.json()).catch(() => null),
+                    fetch(`${API_BASE_URL}/products/${productId}/bom`).then(r => r.json()).catch(() => [])
+                  ]).then(([product, entries]) => ({ scoped: true, product, entries }))
+                : fetch(`${API_BASE_URL}/bom`).then(r => r.json()).then(entries => ({ scoped: false, entries, product: null }));
+
+            bomPromise
+                .then(payload => {
                     bomList.innerHTML = '';
-                    
-                    if (data.length === 0) {
+
+                    const { scoped, entries, product } = payload;
+
+                    if (!entries || entries.length === 0) {
                         bomList.innerHTML = '<div class="alert alert-info">No bill of materials entries found</div>';
                     } else {
-                        // Group BOM entries by product
-                        const bomByProduct = {};
-                        
-                        data.forEach(entry => {
-                            if (!bomByProduct[entry.product_id]) {
-                                bomByProduct[entry.product_id] = {
-                                    product: entry.product,
-                                    entries: []
-                                };
-                            }
-                            
-                            bomByProduct[entry.product_id].entries.push(entry);
-                        });
-                        
-                        // Create BOM cards for each product
-                        for (const productId in bomByProduct) {
-                            const productBom = bomByProduct[productId];
-                            const productCard = document.createElement('div');
-                            productCard.className = 'card mb-4 bom-product';
-                            productCard.dataset.productId = productId;
-                            
-                            let entriesHtml = '';
-                            productBom.entries.forEach(entry => {
-                                entriesHtml += `
-                                    <div class="bom-item" data-entry-id="${entry.id}">
-                                        <div class="bom-item-header">
-                                            <strong>${entry.material.name} (${entry.material.code})</strong>
-                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteBOMEntry(${entry.id})">Remove</button>
-                                        </div>
-                                        <div>Quantity: ${entry.quantity} ${entry.unit}</div>
-                                    </div>
-                                `;
+                        if (scoped) {
+                            renderBomCard(product, entries);
+                        } else {
+                            const bomByProduct = {};
+                            entries.forEach(entry => {
+                                if (!bomByProduct[entry.product_id]) {
+                                    bomByProduct[entry.product_id] = {
+                                        product: entry.product,
+                                        entries: []
+                                    };
+                                }
+                                bomByProduct[entry.product_id].entries.push(entry);
                             });
-                            
-                            productCard.innerHTML = `
-                                <div class="card-header">
-                                    <h5>${productBom.product.name} (${productBom.product.code})</h5>
-                                </div>
-                                <div class="card-body">
-                                    <h6>Components:</h6>
-                                    ${entriesHtml}
-                                </div>
-                            `;
-                            
-                            bomList.appendChild(productCard);
+
+                            Object.keys(bomByProduct).forEach(pid => {
+                                const productBom = bomByProduct[pid];
+                                renderBomCard(productBom.product, productBom.entries);
+                            });
                         }
                     }
                     
                     bomLoading.style.display = 'none';
-                    
-                    // Apply filter if selected
-                    filterBOM();
                 })
                 .catch(error => {
                     console.error('Error loading bill of materials:', error);
                     bomList.innerHTML = '<div class="alert alert-danger">Error loading bill of materials</div>';
                     bomLoading.style.display = 'none';
                 });
+        }
+
+        function renderBomCard(product, entries) {
+            if (!product) return;
+            const productCard = document.createElement('div');
+            productCard.className = 'card mb-4 bom-product';
+            productCard.dataset.productId = product.id;
+            
+            let entriesHtml = '';
+            entries.forEach(entry => {
+                entriesHtml += `
+                    <div class="bom-item" data-entry-id="${entry.id}">
+                        <div class="bom-item-header">
+                            <strong>${entry.material.name} (${entry.material.code})</strong>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteBOMEntry(${entry.id})">Remove</button>
+                        </div>
+                        <div>Quantity: ${entry.quantity} ${entry.unit}</div>
+                    </div>
+                `;
+            });
+            
+            productCard.innerHTML = `
+                <div class="card-header">
+                    <h5>${product.name} (${product.code})</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Components:</h6>
+                    ${entriesHtml || '<p class="text-muted">No components</p>'}
+                </div>
+            `;
+            
+            bomList.appendChild(productCard);
         }
         
         // Create BOM entry
@@ -972,37 +987,60 @@
             // Load products for dropdown
             loadProductsForDropdown('planProduct');
             
-            fetch(`${API_BASE_URL}/production-plans`)
-                .then(response => response.json())
-                .then(data => {
-                    plansTableBody.innerHTML = '';
-                    
-                    if (data.length === 0) {
-                        plansTableBody.innerHTML = '<tr><td colspan="6" class="text-center">No production plans found</td></tr>';
-                    } else {
-                        data.forEach(plan => {
-                            const row = document.createElement('tr');
-                            row.innerHTML = `
-                                <td>${plan.id}</td>
-                                <td>${plan.product ? plan.product.name : 'Unknown'}</td>
-                                <td>${plan.quantity}</td>
-                                <td>${formatDate(plan.due_date)}</td>
-                                <td><span class="badge bg-${getStatusBadgeColor(plan.status)}">${plan.status}</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-danger btn-action" onclick="deletePlan(${plan.id})">Delete</button>
-                                </td>
-                            `;
-                            plansTableBody.appendChild(row);
-                        });
-                    }
-                    
-                    plansLoading.style.display = 'none';
-                })
-                .catch(error => {
-                    console.error('Error loading production plans:', error);
-                    plansTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading production plans</td></tr>';
-                    plansLoading.style.display = 'none';
-                });
+            Promise.all([
+                fetch(`${API_BASE_URL}/materials`).then(r => r.json()).catch(() => []),
+                fetch(`${API_BASE_URL}/production-plans`).then(r => r.json())
+            ])
+            .then(([materials, data]) => {
+                plansTableBody.innerHTML = '';
+
+                const materialMap = {};
+                if (Array.isArray(materials)) {
+                    materials.forEach(m => materialMap[m.id] = m);
+                }
+                
+                if (!Array.isArray(data) || data.length === 0) {
+                    plansTableBody.innerHTML = '<tr><td colspan="7" class="text-center">No production plans found</td></tr>';
+                } else {
+                    data.forEach(plan => {
+                        const mat = materialMap[plan.product_id];
+                        const inventory = mat ? `${mat.stock_quantity ?? 0} ${mat.unit || ''}` : '-';
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${plan.id}</td>
+                            <td>${plan.product ? plan.product.name : 'Unknown'}</td>
+                            <td>${plan.quantity}</td>
+                            <td>${formatDate(plan.due_date)}</td>
+                            <td>${inventory}</td>
+                            <td><span class="badge bg-${getStatusBadgeColor(plan.status)}">${plan.status}</span></td>
+                            <td class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary btn-action" onclick="openBomEditor(${plan.product_id})">Edit BOM</button>
+                                <button class="btn btn-sm btn-outline-danger btn-action" onclick="deletePlan(${plan.id})">Delete</button>
+                            </td>
+                        `;
+                        plansTableBody.appendChild(row);
+                    });
+                }
+                
+                plansLoading.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error loading production plans:', error);
+                plansTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading production plans</td></tr>';
+                plansLoading.style.display = 'none';
+            });
+        }
+
+        function openBomEditor(productId) {
+            // Select product filter to focus the BOM tab on this product
+            document.getElementById('bomProductFilter').value = productId;
+            filterBOM();
+            // Switch to BOM tab
+            const bomTabBtn = document.getElementById('bom-tab');
+            const tab = new bootstrap.Tab(bomTabBtn);
+            tab.show();
+            // Preselect product in BOM add form for convenience
+            document.getElementById('bomProduct').value = productId;
         }
         
         // Create production plan

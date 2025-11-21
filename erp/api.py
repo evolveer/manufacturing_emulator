@@ -305,6 +305,22 @@ class ProductBOMAPI(Resource):
         except Exception as e:
             return {'error': str(e)}, 500
 
+class ProductStockAPI(Resource):
+    def put(self, product_id):
+        """Update product stock (finished goods inventory)"""
+        try:
+            data = request.get_json()
+            if not data or 'quantity_change' not in data:
+                return {'error': 'No quantity_change provided'}, 400
+
+            transaction_type = data.get('transaction_type', 'production')
+            result = ProductService.update_product_stock(product_id, data['quantity_change'], transaction_type)
+            if not result:
+                return {'error': 'Product not found'}, 404
+            return result
+        except Exception as e:
+            return {'error': str(e)}, 500
+
 class ProductBOMItemAPI(Resource):
     def delete(self, product_id, material_id):
         """Remove a material from a product's bill of materials"""
