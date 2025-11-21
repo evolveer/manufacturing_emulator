@@ -16,8 +16,9 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Dashboard</a>
+                    
+                     <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/erp">ERP</a>
@@ -26,7 +27,13 @@
                         <a class="nav-link" href="/mes">MES</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/pcs">PCS</a>
+                        <a class="nav-link" href="/pcs">PCS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/monitoring">Monitoring</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/order-workflow">Order Workflow</a>
                     </li>
                 </ul>
             </div>
@@ -94,129 +101,66 @@
         </div>
     </div>
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Machine control functions
         function startMachine(machineId) {
-            fetch(`/api/pcs/machines/${machineId}/start`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(`Machine ${machineId} started successfully`);
-                refreshMachineStatus();
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert(`Error starting machine ${machineId}`);
-            });
-        }
-        
-        function stopMachine(machineId) {
-            fetch(`/api/pcs/machines/${machineId}/stop`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(`Machine ${machineId} stopped successfully`);
-                refreshMachineStatus();
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(`Machine ${machineId} stopped successfully`);
-                refreshMachineStatus();
-            })
-            .catch(error => {
-                document.getElementById('alarms-list').innerHTML = '<p>Error loading alarms</p>';
-                console.error('Error:', error);
-            });
+            fetch(`/api/pcs/machines/${machineId}/start`, { method: 'POST' })
+                .then(r => r.json())
+                .then(() => loadMachineStatus())
+                .catch(err => {
+                    console.error(err);
+                    alert(`Error starting machine ${machineId}`);
+                });
         }
 
-        // Alarm management functions
-        function acknowledgeAlarm(alarmId) {
-            fetch(`/api/pcs/alarms/${alarmId}/acknowledge`, {
-                method: 'POST'
-            })
-        function acknowledgeAlarm(alarmId) {
-            fetch(`/api/pcs/alarms/${alarmId}/acknowledge`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Alarm acknowledged:', data);
-                refreshAlarms();
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert(`Error acknowledging alarm ${alarmId}`);
-            });
+        function stopMachine(machineId) {
+            fetch(`/api/pcs/machines/${machineId}/stop`, { method: 'POST' })
+                .then(r => r.json())
+                .then(() => loadMachineStatus())
+                .catch(err => {
+                    console.error(err);
+                    alert(`Error stopping machine ${machineId}`);
+                });
         }
-        
+
+        function acknowledgeAlarm(alarmId) {
+            fetch(`/api/pcs/alarms/${alarmId}/acknowledge`, { method: 'POST' })
+                .then(r => r.json())
+                .then(() => loadAlarms())
+                .catch(err => {
+                    console.error(err);
+                    alert(`Error acknowledging alarm ${alarmId}`);
+                });
+        }
+
         function resolveAlarm(alarmId) {
-            if (confirm('Are you sure you want to resolve this alarm?')) {
-                fetch(`/api/pcs/alarms/${alarmId}/resolve`, {
-                    method: 'POST'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Alarm resolved:', data);
-                    refreshAlarms();
-                })
-                .catch(error => {
-                    console.error('Error:', error);
+            if (!confirm('Resolve this alarm?')) return;
+            fetch(`/api/pcs/alarms/${alarmId}/resolve`, { method: 'POST' })
+                .then(r => r.json())
+                .then(() => loadAlarms())
+                .catch(err => {
+                    console.error(err);
                     alert(`Error resolving alarm ${alarmId}`);
                 });
-            }
         }
 
-        // Refresh functions
-        function refreshMachineStatus() {
-            loadMachineStatus();
-        }
-
-        function refreshAlarms() {
-            loadAlarms();
-        }
-
-        // Load machine status
         function loadMachineStatus() {
             fetch('/api/pcs/machines/status')
-                .then(response => response.json())
+                .then(r => r.json())
                 .then(data => {
                     const machineStatus = document.getElementById('machine-status');
-                    if (Object.keys(data).length === 0) {
-                        machineStatus.innerHTML = '<p>No machines found</p>';
-                        return;
-
-        // Refresh functions
-        function refreshMachineStatus() {
-            loadMachineStatus();
-        }
-
-        function refreshAlarms() {
-            loadAlarms();
-        }
-
-        // Load machine status
-        function loadMachineStatus() {
-            fetch('/api/pcs/machines/status')
-                .then(response => response.json())
-                .then(data => {
-                    const machineStatus = document.getElementById('machine-status');
-                    if (Object.keys(data).length === 0) {
+                    if (!data || Object.keys(data).length === 0) {
                         machineStatus.innerHTML = '<p>No machines found</p>';
                         return;
                     }
-                    
-                    let html = '<table class="table table-striped">';
-                    html += '<thead><tr><th>Machine ID</th><th>Status</th><th>Current Phase</th><th>Work Order</th><th>Cycle Count</th><th>Actions</th></tr></thead>';
-                    html += '<tbody>';
-                    
+
+                    let html = '<div class="table-responsive"><table class="table table-striped">';
+                    html += '<thead><tr><th>Machine ID</th><th>Status</th><th>Phase</th><th>Work Order</th><th>Cycle Count</th><th>Actions</th></tr></thead><tbody>';
+
                     for (const [machineId, status] of Object.entries(data)) {
                         const statusClass = status.running ? 'text-success' : 'text-secondary';
                         const statusText = status.running ? (status.current_phase || 'Running') : 'Idle';
-                        
                         html += `<tr>
                             <td>${machineId}</td>
                             <td class="${statusClass}"><strong>${statusText}</strong></td>
@@ -233,173 +177,138 @@
                             </td>
                         </tr>`;
                     }
-                }
-                
-                // Create parameter cards by category
-                for (const [category, params] of Object.entries(categories)) {
-                    if (params.length === 0 && category !== 'Other') continue;
-                    
-                    html += '</tbody></table>';
+
+                    html += '</tbody></table></div>';
                     machineStatus.innerHTML = html;
                 })
-                .catch(error => {
+                .catch(err => {
                     document.getElementById('machine-status').innerHTML = '<p class="text-danger">Error loading machine status</p>';
-                    console.error('Error:', error);
+                    console.error(err);
                 });
         }
-            
-        // Load alarms with action buttons
+
         function loadAlarms() {
             fetch('/api/pcs/alarms')
-                .then(response => response.json())
+                .then(r => r.json())
                 .then(data => {
                     const alarmsList = document.getElementById('alarms-list');
-                    if (data.length === 0) {
+                    if (!Array.isArray(data) || data.length === 0) {
                         alarmsList.innerHTML = '<p class="text-success">No active alarms</p>';
                         return;
                     }
-                    
-                    // Filter active and acknowledged alarms
-                    const activeAlarms = data.filter(alarm => alarm.status === 'active' || alarm.status === 'acknowledged');
-                    
-                    if (activeAlarms.length === 0) {
-                    const activeAlarms = data.filter(alarm => alarm.status === 'active' || alarm.status === 'acknowledged');
-                    
-                    if (activeAlarms.length === 0) {
+
+                    const active = data.filter(a => a.status === 'active' || a.status === 'acknowledged');
+                    if (active.length === 0) {
                         alarmsList.innerHTML = '<p class="text-success">No active alarms</p>';
                         return;
                     }
-                    
-                    let html = '<div class="table-responsive">';
-                    html += '<table class="table table-striped table-hover">';
-                    html += '<thead><tr><th>ID</th><th>Machine</th><th>Code</th><th>Message</th><th>Severity</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead>';
-                    html += '<tbody>';
-                    
-                    activeAlarms.forEach(alarm => {
-                        let severityClass = '';
-                        let severityIcon = '';
-                        if (alarm.severity === 'warning') {
-                            severityClass = 'text-warning';
-                            severityIcon = '<i class="bi bi-exclamation-triangle-fill"></i>';
-                        } else if (alarm.severity === 'error') {
-                            severityClass = 'text-danger';
-                            severityIcon = '<i class="bi bi-x-circle-fill"></i>';
-                        } else if (alarm.severity === 'critical') {
-                            severityClass = 'text-danger fw-bold';
-                            severityIcon = '<i class="bi bi-exclamation-octagon-fill"></i>';
-                        }
-                    } else {
-                        // Add categorized parameters
-                        for (const param of params) {
-                            if (data[param] !== undefined) {
-                                const displayName = param.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                                html += `<tr>
-                                    <td>${displayName}</td>
-                                    <td>${data[param]}</td>
-                                </tr>`;
-                            }
-                        }
-                    }
-                    
-                    html += `</tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>`;
-                }
-                
-                html += '</div>';
-                parametersList.innerHTML = html;
-            })
-            .catch(error => {
-                document.getElementById('parameters-list').innerHTML = '<p>Error loading parameters</p>';
-                console.error('Error:', error);
-            });
-            
-        // Fetch cycles
-        fetch('/api/pcs/machines/1/cycles')
-            .then(response => response.json())
-            .then(data => {
-                const cyclesList = document.getElementById('cycles-list');
-                if (data.length === 0) {
-                    cyclesList.innerHTML = '<p>No cycles found</p>';
-                    return;
-                }
-                
-                let html = '<table class="table table-striped">';
-                html += '<thead><tr><th>Cycle ID</th><th>Machine</th><th>Work Order</th><th>Start Time</th><th>End Time</th><th>Duration</th><th>Status</th></tr></thead>';
-                html += '<tbody>';
-                
-                // Sort cycles by start time (newest first)
-                data.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
-                
-                // Show only the 10 most recent cycles
-                const recentCycles = data.slice(0, 10);
-                
-                recentCycles.forEach(cycle => {
-                    const startTime = new Date(cycle.start_time).toLocaleString();
-                    const endTime = cycle.end_time ? new Date(cycle.end_time).toLocaleString() : '-';
-                    const duration = cycle.duration ? `${cycle.duration.toFixed(1)}s` : '-';
-                    
-                    html += `<tr>
-                        <td>${cycle.id}</td>
-                        <td>${cycle.machine_id}</td>
-                        <td>${cycle.work_order_id || '-'}</td>
-                        <td>${startTime}</td>
-                        <td>${endTime}</td>
-                        <td>${duration}</td>
-                        <td>${cycle.status}</td>
-                    </tr>`;
+
+                    let html = '<div class="table-responsive"><table class="table table-striped table-hover">';
+                    html += '<thead><tr><th>ID</th><th>Machine</th><th>Code</th><th>Message</th><th>Severity</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>';
+
+                    active.forEach(alarm => {
+                        html += `<tr>
+                            <td>${alarm.id}</td>
+                            <td>${alarm.machine_id}</td>
+                            <td>${alarm.alarm_code}</td>
+                            <td>${alarm.description}</td>
+                            <td>${alarm.severity}</td>
+                            <td>${alarm.status}</td>
+                            <td>${alarm.start_time ? new Date(alarm.start_time).toLocaleString() : '-'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-2" onclick="acknowledgeAlarm(${alarm.id})">Ack</button>
+                                <button class="btn btn-sm btn-outline-success" onclick="resolveAlarm(${alarm.id})">Resolve</button>
+                            </td>
+                        </tr>`;
+                    });
+
+                    html += '</tbody></table></div>';
+                    alarmsList.innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById('alarms-list').innerHTML = '<p class="text-danger">Error loading alarms</p>';
+                    console.error(err);
                 });
-                
-                html += '</tbody></table>';
-                cyclesList.innerHTML = html;
-            })
-            .catch(error => {
-                document.getElementById('cycles-list').innerHTML = '<p>Error loading cycles</p>';
-                console.error('Error:', error);
-            });
-            
-        // Machine control functions
-        function startMachine(machineId) {
-            fetch(`/api/pcs/machines/${machineId}/start`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ work_order_id: 1 })  // Default to work order 1
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(`Machine ${machineId} started`);
-                // Refresh machine status
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
-            })
-            .catch(error => {
-                console.error('Error starting machine:', error);
-                alert(`Error starting machine ${machineId}`);
-            });
         }
-        
-        function stopMachine(machineId) {
-            fetch(`/api/pcs/machines/${machineId}/stop`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(`Machine ${machineId} stopped`);
-                // Refresh machine status
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
-            })
-            .catch(error => {
-                console.error('Error stopping machine:', error);
-                alert(`Error stopping machine ${machineId}`);
-            });
+
+        function loadParameters() {
+            fetch('/api/pcs/parameters')
+                .then(r => r.json())
+                .then(data => {
+                    const parametersList = document.getElementById('parameters-list');
+                    if (!Array.isArray(data) || data.length === 0) {
+                        parametersList.innerHTML = '<p>No parameters found</p>';
+                        return;
+                    }
+
+                    let html = '<div class="table-responsive"><table class="table table-striped">';
+                    html += '<thead><tr><th>Machine</th><th>Name</th><th>Value</th><th>Set Point</th><th>Unit</th></tr></thead><tbody>';
+
+                    data.forEach(param => {
+                        html += `<tr>
+                            <td>${param.machine_id}</td>
+                            <td>${param.parameter_name}</td>
+                            <td>${param.current_value ?? '-'}</td>
+                            <td>${param.set_point ?? '-'}</td>
+                            <td>${param.unit || '-'}</td>
+                        </tr>`;
+                    });
+
+                    html += '</tbody></table></div>';
+                    parametersList.innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById('parameters-list').innerHTML = '<p class="text-danger">Error loading parameters</p>';
+                    console.error(err);
+                });
         }
+
+        function loadCycles() {
+            fetch('/api/pcs/machines/1/cycles')
+                .then(r => r.json())
+                .then(data => {
+                    const cyclesList = document.getElementById('cycles-list');
+                    if (!Array.isArray(data) || data.length === 0) {
+                        cyclesList.innerHTML = '<p>No cycles found</p>';
+                        return;
+                    }
+
+                    data.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+                    const recent = data.slice(0, 10);
+
+                    let html = '<div class="table-responsive"><table class="table table-striped">';
+                    html += '<thead><tr><th>Cycle ID</th><th>Machine</th><th>Work Order</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th></tr></thead><tbody>';
+
+                    recent.forEach(cycle => {
+                        const start = cycle.start_time ? new Date(cycle.start_time).toLocaleString() : '-';
+                        const end = cycle.end_time ? new Date(cycle.end_time).toLocaleString() : '-';
+                        const duration = cycle.duration ? `${cycle.duration.toFixed(1)}s` : '-';
+                        html += `<tr>
+                            <td>${cycle.id}</td>
+                            <td>${cycle.machine_id}</td>
+                            <td>${cycle.work_order_id || '-'}</td>
+                            <td>${start}</td>
+                            <td>${end}</td>
+                            <td>${duration}</td>
+                            <td>${cycle.status}</td>
+                        </tr>`;
+                    });
+
+                    html += '</tbody></table></div>';
+                    cyclesList.innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById('cycles-list').innerHTML = '<p class="text-danger">Error loading cycles</p>';
+                    console.error(err);
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMachineStatus();
+            loadAlarms();
+            loadParameters();
+            loadCycles();
+        });
     </script>
 </body>
 </html>

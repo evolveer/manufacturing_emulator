@@ -200,14 +200,15 @@ def erp_api_proxy(subpath):
 def mes_api_proxy(subpath):
     """Proxy requests to MES API"""
     url = f"{mes_url}/{subpath}"
+    payload = request.get_json(silent=True)
     
     try:
         if request.method == 'GET':
             response = requests.get(url, params=request.args)
         elif request.method == 'POST':
-            response = requests.post(url, json=request.get_json())
+            response = requests.post(url, json=payload) if payload is not None else requests.post(url)
         elif request.method == 'PUT':
-            response = requests.put(url, json=request.get_json())
+            response = requests.put(url, json=payload) if payload is not None else requests.put(url)
         elif request.method == 'DELETE':
             response = requests.delete(url)
         else:
@@ -224,14 +225,15 @@ def mes_api_proxy(subpath):
 def pcs_api_proxy(subpath):
     """Proxy requests to PCS API"""
     url = f"{pcs_url}/{subpath}"
+    payload = request.get_json(silent=True)
     
     try:
         if request.method == 'GET':
             response = requests.get(url, params=request.args)
         elif request.method == 'POST':
-            response = requests.post(url, json=request.get_json())
+            response = requests.post(url, json=payload) if payload is not None else requests.post(url)
         elif request.method == 'PUT':
-            response = requests.put(url, json=request.get_json())
+            response = requests.put(url, json=payload) if payload is not None else requests.put(url)
         elif request.method == 'DELETE':
             response = requests.delete(url)
         else:

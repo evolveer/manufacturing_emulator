@@ -16,21 +16,23 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Dashboard</a>
+                     <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/erp">ERP</a>
+                        <a class="nav-link" href="/erp">ERP</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/mes">MES</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/pcs">PCS</a>
-                        
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/monitoring">Monitoring</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/order-workflow">Order Workflow</a>
                     </li>
                 </ul>
             </div>
@@ -69,9 +71,27 @@
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5>Production Plans</h5>
+                        <h5 class="mb-0">Production Plans</h5>
                     </div>
                     <div class="card-body">
+                        <form id="planForm" class="row g-2 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Production Plan ID</label>
+                                <input type="number" class="form-control" id="planId" placeholder="e.g. 1" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="planStartDate" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="planEndDate" required>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100">Create Plan</button>
+                            </div>
+                        </form>
+                        <div id="planResult" class="mb-3"></div>
                         <div id="plans-list">Loading production plans...</div>
                     </div>
                 </div>
@@ -81,99 +101,161 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Fetch materials
-        fetch('/api/erp/materials') 
-            .then(response => response.json())
-            .then(data => {
-                const materialsList = document.getElementById('materials-list');
-                if (data.length === 0) {
-                    materialsList.innerHTML = '<p>No materials found</p>';
-                    return;
-                }
-                
-                let html = '<table class="table table-striped">';
-                html += '<thead><tr><th>ID</th><th>Name</th><th>Quantity</th><th>Unit</th></tr></thead>';
-                html += '<tbody>';
-                
-                data.forEach(material => {
-                    html += `<tr>
-                        <td>${material.id}</td>
-                        <td>${material.name}</td>
-                        <td>${material.quantity}</td>
-                        <td>${material.unit}</td>
-                    </tr>`;
-                });
-                
-                html += '</tbody></table>';
-                materialsList.innerHTML = html;
+        document.addEventListener('DOMContentLoaded', () => {
+            // default dates
+            const today = new Date().toISOString().split('T')[0];
+            const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            document.getElementById('planStartDate').value = today;
+            document.getElementById('planEndDate').value = nextWeek;
+
+            loadMaterials();
+            loadProducts();
+            loadPlans();
+
+            document.getElementById('planForm').addEventListener('submit', handlePlanSubmit);
+        });
+
+        function handlePlanSubmit(e) {
+            e.preventDefault();
+            const planId = parseInt(document.getElementById('planId').value, 10);
+            const startDate = document.getElementById('planStartDate').value;
+            const endDate = document.getElementById('planEndDate').value;
+            const resultDiv = document.getElementById('planResult');
+
+            if (!planId) {
+                resultDiv.innerHTML = `<div class="alert alert-warning">Production Plan ID is required.</div>`;
+                return;
+            }
+            if (startDate && endDate && startDate > endDate) {
+                resultDiv.innerHTML = `<div class="alert alert-warning">End date must be after start date.</div>`;
+                return;
+            }
+
+            fetch(`/api/erp/production-plans/${planId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    start_date: startDate,
+                    end_date: endDate,
+                    status: 'planned'
+                })
             })
-            .catch(error => {
-                document.getElementById('materials-list').innerHTML = '<p>Error loading materials</p>';
-                console.error('Error:', error);
+            .then(async (response) => {
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to update production plan');
+                }
+                resultDiv.innerHTML = `<div class="alert alert-success">Plan updated (ID: ${data.id}).</div>`;
+                loadPlans();
+            })
+            .catch(err => {
+                resultDiv.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+                console.error('Error updating production plan:', err);
             });
+        }
+
+        function loadMaterials() {
+            fetch('/api/erp/materials') 
+                .then(response => response.json())
+                .then(data => {
+                    const materialsList = document.getElementById('materials-list');
+                    if (data.length === 0) {
+                        materialsList.innerHTML = '<p>No materials found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>ID</th><th>Name</th><th>Quantity</th><th>Unit</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    data.forEach(material => {
+                        html += `<tr>
+                            <td>${material.id}</td>
+                            <td>${material.name}</td>
+                            <td>${material.quantity}</td>
+                            <td>${material.unit}</td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table>';
+                    materialsList.innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('materials-list').innerHTML = '<p>Error loading materials</p>';
+                    console.error('Error:', error);
+                });
+        }
             
-        // Fetch products
-        fetch('/api/erp/products')
-            .then(response => response.json())
-            .then(data => {
-                const productsList = document.getElementById('products-list');
-                if (data.length === 0) {
-                    productsList.innerHTML = '<p>No products found</p>';
-                    return;
-                }
-                
-                let html = '<table class="table table-striped">';
-                html += '<thead><tr><th>ID</th><th>Name</th><th>Description</th></tr></thead>';
-                html += '<tbody>';
-                
-                data.forEach(product => {
-                    html += `<tr>
-                        <td>${product.id}</td>
-                        <td>${product.name}</td>
-                        <td>${product.description || ''}</td>
-                    </tr>`;
+        function loadProducts() {
+            fetch('/api/erp/products')
+                .then(response => response.json())
+                .then(data => {
+                    const productsList = document.getElementById('products-list');
+                    if (data.length === 0) {
+                        productsList.innerHTML = '<p>No products found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>ID</th><th>Name</th><th>Description</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    data.forEach(product => {
+                        html += `<tr>
+                            <td>${product.id}</td>
+                            <td>${product.name}</td>
+                            <td>${product.description || ''}</td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table>';
+                    productsList.innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('products-list').innerHTML = '<p>Error loading products</p>';
+                    console.error('Error:', error);
                 });
-                
-                html += '</tbody></table>';
-                productsList.innerHTML = html;
-            })
-            .catch(error => {
-                document.getElementById('products-list').innerHTML = '<p>Error loading products</p>';
-                console.error('Error:', error);
-            });
+        }
             
-        // Fetch production plans
-        fetch('/api/erp/production-plans')
-            .then(response => response.json())
-            .then(data => {
-                const plansList = document.getElementById('plans-list');
-                if (data.length === 0) {
-                    plansList.innerHTML = '<p>No production plans found</p>';
-                    return;
-                }
-                
-                let html = '<table class="table table-striped">';
-                html += '<thead><tr><th>ID</th><th>Product</th><th>Quantity</th><th>Status</th><th>Due Date</th></tr></thead>';
-                html += '<tbody>';
-                
-                data.forEach(plan => {
-                    const dueDate = new Date(plan.due_date).toLocaleDateString();
-                    html += `<tr>
-                        <td>${plan.id}</td>
-                        <td>${plan.product_name || plan.product_id}</td>
-                        <td>${plan.completed_quantity || 0} / ${plan.quantity}</td>
-                        <td>${plan.status}</td>
-                        <td>${dueDate}</td>
-                    </tr>`;
+        function loadPlans() {
+            fetch('/api/erp/production-plans')
+                .then(response => response.json())
+                .then(data => {
+                    const plansList = document.getElementById('plans-list');
+                    if (!Array.isArray(data) || data.length === 0) {
+                        plansList.innerHTML = '<p>No production plans found</p>';
+                        return;
+                    }
+
+                    const safeDate = (d) => {
+                        if (!d) return '-';
+                        const parsed = new Date(d);
+                        return isNaN(parsed) ? '-' : parsed.toLocaleString();
+                    };
+
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>ID</th><th>Plan #</th><th>Order</th><th>Status</th><th>Start</th><th>End</th></tr></thead>';
+                    html += '<tbody>';
+
+                    data.forEach(plan => {
+                        html += `<tr>
+                            <td>${plan.id ?? '-'}</td>
+                            <td>${plan.plan_number || '-'}</td>
+                            <td>${plan.order_id ?? '-'}</td>
+                            <td>${plan.status || '-'}</td>
+                            <td>${safeDate(plan.start_date)}</td>
+                            <td>${safeDate(plan.end_date)}</td>
+                        </tr>`;
+                    });
+
+                    html += '</tbody></table>';
+                    plansList.innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('plans-list').innerHTML = '<p>Error loading production plans</p>';
+                    console.error('Error:', error);
                 });
-                
-                html += '</tbody></table>';
-                plansList.innerHTML = html;
-            })
-            .catch(error => {
-                document.getElementById('plans-list').innerHTML = '<p>Error loading production plans</p>';
-                console.error('Error:', error);
-            });
+        }
     </script>
 </body>
 </html>

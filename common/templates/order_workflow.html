@@ -524,13 +524,23 @@
                     })
                 });
                 
-                if (response.ok) {
-                    showResult(5, `Work order assigned to Machine ${workflowState.machineId}`);
-                    log(`Work order assigned to machine ${workflowState.machineId}`, 'success');
-                    document.getElementById('startProductionBtn').disabled = false;
-                } else {
-                    throw new Error('Failed to assign work order');
-                }
+                if (!response.ok) throw new Error('Failed to assign work order to PCS');
+
+                // Also update the MES work order with the selected machine
+                const mesUpdate = await fetch(`/api/mes/work-orders/${workflowState.workOrderId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        machine_id: parseInt(workflowState.machineId),
+                        status: 'planned'
+                    })
+                });
+                
+                if (!mesUpdate.ok) throw new Error('Failed to assign machine in MES');
+
+                showResult(5, `Work order assigned to Machine ${workflowState.machineId}`);
+                log(`Work order assigned to machine ${workflowState.machineId}`, 'success');
+                document.getElementById('startProductionBtn').disabled = false;
             } catch (error) {
                 showResult(5, `Error: ${error.message}`, 'error');
                 log(`Error assigning to machine: ${error.message}`, 'error');
@@ -543,7 +553,9 @@
             
             try {
                 const response = await fetch(`/api/pcs/machines/${workflowState.machineId}/start`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ work_order_id: workflowState.workOrderId })
                 });
                 
                 if (response.ok) {

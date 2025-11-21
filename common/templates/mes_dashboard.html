@@ -16,17 +16,25 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Dashboard</a>
+
+                    
+                     <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/erp">ERP</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/mes">MES</a>
+                        <a class="nav-link" href="/mes">MES</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/pcs">PCS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/monitoring">Monitoring</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/order-workflow">Order Workflow</a>
                     </li>
                 </ul>
             </div>
@@ -40,8 +48,12 @@
         <div class="row mt-4">
             <div class="col-md-6">
                 <div class="card">
-                    <div class="card-header">
-                        <h5>Work Orders</h5>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Work Orders</h5>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="hideCompletedToggle">
+                            <label class="form-check-label" for="hideCompletedToggle">Hide completed</label>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div id="work-orders-list">Loading work orders...</div>
@@ -88,93 +100,192 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Fetch work orders
-        fetch('/api/mes/work-orders')
-            .then(response => response.json())
-            .then(data => {
-                const workOrdersList = document.getElementById('work-orders-list');
-                if (data.length === 0) {
-                    workOrdersList.innerHTML = '<p>No work orders found</p>';
+        // Load work orders at start
+        let hideCompleted = false;
+        let machinesCache = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMachines(); // loads machine list and caches machines
+            loadWorkOrders();
+            document.getElementById('hideCompletedToggle').addEventListener('change', (e) => {
+                hideCompleted = e.target.checked;
+                loadWorkOrders();
+            });
+        });
+
+        function getMachineSelection(workOrderId) {
+            const sel = document.getElementById(`wo-machine-${workOrderId}`);
+            if (!sel) return null;
+            const val = sel.value;
+            return val ? parseInt(val) : null;
+        }
+
+        function loadWorkOrders() {
+            fetch('/api/mes/work-orders')
+                .then(response => response.json())
+                .then(data => {
+                    const workOrdersList = document.getElementById('work-orders-list');
+                    if (!Array.isArray(data) || data.length === 0) {
+                        workOrdersList.innerHTML = '<p>No work orders found</p>';
+                        return;
+                    }
+                    
+                    const filtered = hideCompleted ? data.filter(w => w.status !== 'completed') : data;
+                    if (filtered.length === 0) {
+                        workOrdersList.innerHTML = '<p>No work orders found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>ID</th><th>Product</th><th>Quantity</th><th>Status</th><th>Machine</th><th>Actions</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    filtered.forEach(workOrder => {
+                        const status = (workOrder.status || '').toLowerCase();
+                        const needsPlanning = !status || !['planned', 'in_progress', 'completed', 'cancelled'].includes(status);
+                        const canStart = status === 'planned';
+                        const disabled = ['in_progress', 'completed', 'cancelled'].includes(status);
+
+                        let actionLabel = 'Start';
+                        let nextStatus = 'in_progress';
+                        if (needsPlanning) {
+                            actionLabel = 'Plan';
+                            nextStatus = 'planned';
+                        }
+
+                        const machineOptions = machinesCache.map(m => `<option value="${m.id}" ${workOrder.machine_id === m.id ? 'selected' : ''}>${m.name || 'Machine'} ${m.id}</option>`).join('');
+                        const machineCell = workOrder.machine_id
+                            ? workOrder.machine_id
+                            : (machinesCache.length
+                                ? `<select class="form-select form-select-sm" id="wo-machine-${workOrder.id}">${machineOptions}</select>`
+                                : 'Not assigned');
+
+                        const machineArg = workOrder.machine_id ? workOrder.machine_id : `getMachineSelection(${workOrder.id})`;
+
+                        html += `<tr>
+                            <td>${workOrder.id}</td>
+                            <td>${workOrder.product_name || workOrder.product_id}</td>
+                            <td>${workOrder.completed_quantity || 0} / ${workOrder.quantity}</td>
+                            <td>${workOrder.status || '-'}</td>
+                            <td>${machineCell}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" onclick="updateWorkOrderStatus(${workOrder.id}, '${nextStatus}', ${machineArg})" ${disabled ? 'disabled' : ''}>
+                                    ${actionLabel}
+                                </button>
+                            </td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table>';
+                    workOrdersList.innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('work-orders-list').innerHTML = '<p>Error loading work orders</p>';
+                    console.error('Error:', error);
+                });
+        }
+
+        async function updateWorkOrderStatus(workOrderId, status, machineId) {
+            try {
+                const response = await fetch(`/api/mes/work-orders/${workOrderId}/status`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ status })
+                });
+                if (!response.ok) throw new Error('Failed to update work order');
+
+                // Require machine assignment for planning/starting
+                if ((status === 'planned' || status === 'in_progress') && !machineId) {
+                    alert('Assign a machine to this work order before continuing.');
+                    await loadWorkOrders();
                     return;
                 }
-                
-                let html = '<table class="table table-striped">';
-                html += '<thead><tr><th>ID</th><th>Product</th><th>Quantity</th><th>Status</th><th>Machine</th></tr></thead>';
-                html += '<tbody>';
-                
-                data.forEach(workOrder => {
-                    html += `<tr>
-                        <td>${workOrder.id}</td>
-                        <td>${workOrder.product_name || workOrder.product_id}</td>
-                        <td>${workOrder.completed_quantity || 0} / ${workOrder.quantity}</td>
-                        <td>${workOrder.status}</td>
-                        <td>${workOrder.machine_id || 'Not assigned'}</td>
-                    </tr>`;
-                });
-                
-                html += '</tbody></table>';
-                workOrdersList.innerHTML = html;
-            })
-            .catch(error => {
-                document.getElementById('work-orders-list').innerHTML = '<p>Error loading work orders</p>';
-                console.error('Error:', error);
-            });
+
+                // Kick off PCS when moving to in_progress
+                if (status === 'in_progress') {
+                    const pcsResp = await fetch(`/api/pcs/machines/${machineId}/start`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ work_order_id: workOrderId })
+                    });
+                    if (!pcsResp.ok) {
+                        const errText = await pcsResp.text();
+                        throw new Error(`PCS start failed: ${errText || pcsResp.statusText}`);
+                    }
+                }
+                await loadWorkOrders();
+            } catch (err) {
+                alert(err.message);
+                console.error('Error updating work order:', err);
+            }
+        }
             
-        // Fetch machines
-        fetch('/api/mes/machines')
-            .then(response => response.json())
-            .then(data => {
-                const machinesList = document.getElementById('machines-list');
-                if (data.length === 0) {
-                    machinesList.innerHTML = '<p>No machines found</p>';
-                    return;
-                }
-                
-                let html = '<table class="table table-striped">';
-                html += '<thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Status</th><th>Location</th></tr></thead>';
-                html += '<tbody>';
-                
-                data.forEach(machine => {
-                    html += `<tr>
-                        <td>${machine.id}</td>
-                        <td>${machine.name}</td>
-                        <td>${machine.type}</td>
-                        <td>${machine.status}</td>
-                        <td>${machine.location || ''}</td>
-                    </tr>`;
+        // Fetch machines (also cache for work-order selection)
+        function loadMachines() {
+            fetch('/api/mes/machines')
+                .then(response => response.json())
+                .then(data => {
+                    machinesCache = Array.isArray(data) ? data : [];
+                    const machinesList = document.getElementById('machines-list');
+                    if (machinesCache.length === 0) {
+                        machinesList.innerHTML = '<p>No machines found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table class="table table-striped">';
+                    html += '<thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Status</th><th>Location</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    machinesCache.forEach(machine => {
+                        html += `<tr>
+                            <td>${machine.id}</td>
+                            <td>${machine.name}</td>
+                            <td>${machine.type}</td>
+                            <td>${machine.status}</td>
+                            <td>${machine.location || ''}</td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table>';
+                    machinesList.innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('machines-list').innerHTML = '<p>Error loading machines</p>';
+                    console.error('Error:', error);
                 });
-                
-                html += '</tbody></table>';
-                machinesList.innerHTML = html;
-            })
-            .catch(error => {
-                document.getElementById('machines-list').innerHTML = '<p>Error loading machines</p>';
-                console.error('Error:', error);
-            });
+        }
             
         // Fetch schedule
         fetch('/api/mes/schedule')
             .then(response => response.json())
             .then(data => {
                 const scheduleList = document.getElementById('schedule-list');
-                if (data.length === 0) {
+                if (!Array.isArray(data) || data.length === 0) {
                     scheduleList.innerHTML = '<p>No schedule entries found</p>';
                     return;
                 }
+                
+                const safeDate = (d) => {
+                    if (!d) return '-';
+                    const parsed = new Date(d);
+                    return isNaN(parsed) ? '-' : parsed.toLocaleString();
+                };
+                
+                const safeStatus = (s) => s || '-';
                 
                 let html = '<table class="table table-striped">';
                 html += '<thead><tr><th>Machine</th><th>Work Order</th><th>Start Time</th><th>End Time</th><th>Status</th></tr></thead>';
                 html += '<tbody>';
                 
                 data.forEach(entry => {
-                    const startTime = new Date(entry.start_time).toLocaleString();
-                    const endTime = new Date(entry.end_time).toLocaleString();
+                    const startTime = safeDate(entry.start_time);
+                    const endTime = safeDate(entry.end_time);
                     html += `<tr>
-                        <td>${entry.machine_id}</td>
-                        <td>${entry.work_order_id}</td>
+                        <td>${entry.machine_id ?? '-'}</td>
+                        <td>${entry.work_order_id ?? '-'}</td>
                         <td>${startTime}</td>
                         <td>${endTime}</td>
-                        <td>${entry.status}</td>
+                        <td>${safeStatus(entry.status)}</td>
                     </tr>`;
                 });
                 
