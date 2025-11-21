@@ -559,6 +559,26 @@ class OrderService:
 
 class ProductionPlanService:
     """Service for production planning"""
+
+    @staticmethod
+    def _parse_datetime(value):
+        """Convert incoming values (string/date/datetime) to datetime or None"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                # Accept YYYY-MM-DD by appending midnight
+                if len(value) == 10:
+                    return datetime.strptime(value, "%Y-%m-%d")
+                return datetime.fromisoformat(value)
+            except ValueError:
+                return None
+        if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
+            # date object -> datetime at midnight
+            return datetime(value.year, value.month, value.day)
+        return None
     
     @staticmethod
     def get_all_production_plans():
@@ -598,14 +618,17 @@ class ProductionPlanService:
             # Generate plan number if not provided
             if 'plan_number' not in plan_data:
                 plan_data['plan_number'] = f"PP-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+
+            start_dt = ProductionPlanService._parse_datetime(plan_data.get('start_date'))
+            end_dt = ProductionPlanService._parse_datetime(plan_data.get('end_date'))
             
             # Create production plan
             plan = ProductionPlan(
                 plan_number=plan_data['plan_number'],
                 order_id=plan_data.get('order_id'),
                 status=plan_data.get('status', 'planned'),
-                start_date=plan_data.get('start_date'),
-                end_date=plan_data.get('end_date')
+                start_date=start_dt,
+                end_date=end_dt
             )
             session.add(plan)
             session.commit()
@@ -635,7 +658,11 @@ class ProductionPlanService:
             
             # Update fields
             for key, value in plan_data.items():
-                if hasattr(plan, key) and key not in ['id', 'created_at', 'updated_at']:
+                if key in ['id', 'created_at', 'updated_at']:
+                    continue
+                if key in ['start_date', 'end_date']:
+                    setattr(plan, key, ProductionPlanService._parse_datetime(value))
+                elif hasattr(plan, key):
                     setattr(plan, key, value)
             
             session.commit()

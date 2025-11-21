@@ -582,7 +582,11 @@ api.add_resource(OrderStatusAPI, f'{API_PREFIX}/orders/<int:order_id>/status')
 api.add_resource(ProductionPlanListAPI, f'{API_PREFIX}/production-plans')
 api.add_resource(ProductionPlanAPI, f'{API_PREFIX}/production-plans/<int:plan_id>')
 api.add_resource(ProductionPlanByNumberAPI, f'{API_PREFIX}/production-plans/number/<string:plan_number>')
-api.add_resource(ProductionPlanFromOrderAPI, f'{API_PREFIX}/orders/<int:order_id>/create-plan')
+api.add_resource(
+    ProductionPlanFromOrderAPI,
+    f'{API_PREFIX}/orders/<int:order_id>/create-plan',
+    f'{API_PREFIX}/orders/<int:order_id>/production-plan'
+)
 api.add_resource(ProductionPlanUpdateCountsAPI, '/api/v1/production-plans/<int:plan_id>/update-counts')
 
 api.add_resource(MaterialAvailabilityAPI, f'{API_PREFIX}/orders/<int:order_id>/material-availability')
