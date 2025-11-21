@@ -155,6 +155,11 @@ def monitoring():
     """System monitoring page"""
     return render_template('monitoring.html')
 
+@app.route('/order-workflow')
+def order_workflow():
+    """Order processing workflow page"""
+    return render_template('order_workflow.html')
+
 # API routes
 @app.route('/api/status')
 def api_status():

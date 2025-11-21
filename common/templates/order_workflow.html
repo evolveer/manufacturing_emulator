@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Processing Workflow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        .workflow-step {
+            border-left: 3px solid #dee2e6;
+            padding-left: 20px;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        .workflow-step.active {
+            border-left-color: #0d6efd;
+        }
+        .workflow-step.completed {
+            border-left-color: #198754;
+        }
+        .workflow-step::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 5px;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: #dee2e6;
+            border: 2px solid white;
+        }
+        .workflow-step.active::before {
+            background: #0d6efd;
+        }
+        .workflow-step.completed::before {
+            background: #198754;
+        }
+        .step-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .step-actions {
+            margin-top: 15px;
+        }
+        .log-entry {
+            font-size: 0.85rem;
+            padding: 5px;
+            border-left: 2px solid #e9ecef;
+            margin-bottom: 5px;
+        }
+        .log-entry.success {
+            border-left-color: #198754;
+            background-color: #d1e7dd;
+        }
+        .log-entry.error {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .log-entry.info {
+            border-left-color: #0dcaf0;
+            background-color: #cff4fc;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Manufacturing Emulator</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/erp">ERP</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mes">MES</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pcs">PCS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/order-workflow">Order Workflow</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-md-8">
+                <h1>Order Processing Workflow</h1>
+                <p class="text-muted">Complete end-to-end order processing from creation to production</p>
+
+                <!-- Workflow Steps -->
+                <div class="mt-4">
+                    <!-- Step 1: Create Order -->
+                    <div class="workflow-step" id="step1">
+                        <div class="step-header">
+                            <i class="bi bi-1-circle-fill"></i> Step 1: Create Sales Order (ERP)
+                        </div>
+                        <p>Create a new sales order in the ERP system with product and quantity.</p>
+                        
+                        <div class="card">
+                            <div class="card-body">
+                                <form id="createOrderForm">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Order Number</label>
+                                            <input type="text" class="form-control" id="orderNumber" value="ORD-001" required>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Customer Name</label>
+                                            <input type="text" class="form-control" id="customerName" value="Test Customer" required>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Product ID</label>
+                                            <input type="number" class="form-control" id="productId" value="1" required>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Quantity</label>
+                                            <input type="number" class="form-control" id="quantity" value="100" required>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-plus-circle"></i> Create Order
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div id="step1Result" class="mt-2"></div>
+                    </div>
+
+                    <!-- Step 2: Create Production Plan -->
+                    <div class="workflow-step" id="step2">
+                        <div class="step-header">
+                            <i class="bi bi-2-circle-fill"></i> Step 2: Create Production Plan (ERP)
+                        </div>
+                        <p>Generate a production plan from the sales order.</p>
+                        
+                        <div class="step-actions">
+                            <button class="btn btn-primary" id="createPlanBtn" disabled>
+                                <i class="bi bi-calendar-check"></i> Create Production Plan
+                            </button>
+                        </div>
+                        <div id="step2Result" class="mt-2"></div>
+                    </div>
+
+                    <!-- Step 3: Sync to MES -->
+                    <div class="workflow-step" id="step3">
+                        <div class="step-header">
+                            <i class="bi bi-3-circle-fill"></i> Step 3: Sync to MES
+                        </div>
+                        <p>Synchronize production plan and materials from ERP to MES.</p>
+                        
+                        <div class="step-actions">
+                            <button class="btn btn-primary" id="syncToMesBtn" disabled>
+                                <i class="bi bi-arrow-repeat"></i> Sync to MES
+                            </button>
+                        </div>
+                        <div id="step3Result" class="mt-2"></div>
+                    </div>
+
+                    <!-- Step 4: Create Work Order -->
+                    <div class="workflow-step" id="step4">
+                        <div class="step-header">
+                            <i class="bi bi-4-circle-fill"></i> Step 4: Create Work Order (MES)
+                        </div>
+                        <p>Create a work order in MES for production execution.</p>
+                        
+                        <div class="step-actions">
+                            <button class="btn btn-primary" id="createWorkOrderBtn" disabled>
+                                <i class="bi bi-clipboard-check"></i> Create Work Order
+                            </button>
+                        </div>
+                        <div id="step4Result" class="mt-2"></div>
+                    </div>
+
+                    <!-- Step 5: Assign to Machine -->
+                    <div class="workflow-step" id="step5">
+                        <div class="step-header">
+                            <i class="bi bi-5-circle-fill"></i> Step 5: Assign to Machine (PCS)
+                        </div>
+                        <p>Assign the work order to a machine and start production.</p>
+                        
+                        <div class="card mb-2">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-2">
+                                        <label class="form-label">Machine ID</label>
+                                        <select class="form-select" id="machineId">
+                                            <option value="1">Machine 1</option>
+                                            <option value="2">Machine 2</option>
+                                            <option value="3">Machine 3</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="step-actions">
+                            <button class="btn btn-primary me-2" id="assignMachineBtn" disabled>
+                                <i class="bi bi-gear"></i> Assign to Machine
+                            </button>
+                            <button class="btn btn-success" id="startProductionBtn" disabled>
+                                <i class="bi bi-play-fill"></i> Start Production
+                            </button>
+                        </div>
+                        <div id="step5Result" class="mt-2"></div>
+                    </div>
+
+                    <!-- Step 6: Monitor Production -->
+                    <div class="workflow-step" id="step6">
+                        <div class="step-header">
+                            <i class="bi bi-6-circle-fill"></i> Step 6: Monitor Production
+                        </div>
+                        <p>Monitor production progress and handle any alarms.</p>
+                        
+                        <div class="card">
+                            <div class="card-body">
+                                <div id="productionStatus">
+                                    <p class="text-muted">Production not started</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="step6Result" class="mt-2"></div>
+                    </div>
+
+                    <!-- Step 7: Complete Order -->
+                    <div class="workflow-step" id="step7">
+                        <div class="step-header">
+                            <i class="bi bi-7-circle-fill"></i> Step 7: Complete Order
+                        </div>
+                        <p>Mark the order as completed and update inventory.</p>
+                        
+                        <div class="step-actions">
+                            <button class="btn btn-success" id="completeOrderBtn" disabled>
+                                <i class="bi bi-check-circle"></i> Complete Order
+                            </button>
+                        </div>
+                        <div id="step7Result" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card sticky-top" style="top: 20px;">
+                    <div class="card-header">
+                        <h5 class="mb-0">Workflow Log</h5>
+                    </div>
+                    <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                        <div id="workflowLog">
+                            <p class="text-muted">No activity yet</p>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="clearLog()">
+                            <i class="bi bi-trash"></i> Clear Log
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-warning btn-sm w-100 mb-2" onclick="resetWorkflow()">
+                            <i class="bi bi-arrow-counterclockwise"></i> Reset Workflow
+                        </button>
+                        <button class="btn btn-info btn-sm w-100 mb-2" onclick="loadExistingOrders()">
+                            <i class="bi bi-list"></i> Load Existing Orders
+                        </button>
+                        <a href="/pcs" class="btn btn-secondary btn-sm w-100">
+                            <i class="bi bi-exclamation-triangle"></i> View Alarms
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let workflowState = {
+            orderId: null,
+            planId: null,
+            workOrderId: null,
+            machineId: null,
+            currentStep: 1
+        };
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('workflowLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<strong>${timestamp}</strong> - ${message}`;
+            
+            if (logDiv.querySelector('.text-muted')) {
+                logDiv.innerHTML = '';
+            }
+            
+            logDiv.insertBefore(entry, logDiv.firstChild);
+        }
+
+        function clearLog() {
+            document.getElementById('workflowLog').innerHTML = '<p class="text-muted">No activity yet</p>';
+        }
+
+        function setStepStatus(stepNum, status) {
+            const step = document.getElementById(`step${stepNum}`);
+            step.classList.remove('active', 'completed');
+            if (status === 'active') {
+                step.classList.add('active');
+            } else if (status === 'completed') {
+                step.classList.add('completed');
+            }
+        }
+
+        function showResult(stepNum, message, type = 'success') {
+            const resultDiv = document.getElementById(`step${stepNum}Result`);
+            resultDiv.innerHTML = `<div class="alert alert-${type === 'error' ? 'danger' : 'success'} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`;
+        }
+
+        function resetWorkflow() {
+            if (confirm('Are you sure you want to reset the workflow?')) {
+                workflowState = {
+                    orderId: null,
+                    planId: null,
+                    workOrderId: null,
+                    machineId: null,
+                    currentStep: 1
+                };
+                
+                for (let i = 1; i <= 7; i++) {
+                    setStepStatus(i, '');
+                    document.getElementById(`step${i}Result`).innerHTML = '';
+                }
+                
+                document.getElementById('createPlanBtn').disabled = true;
+                document.getElementById('syncToMesBtn').disabled = true;
+                document.getElementById('createWorkOrderBtn').disabled = true;
+                document.getElementById('assignMachineBtn').disabled = true;
+                document.getElementById('startProductionBtn').disabled = true;
+                document.getElementById('completeOrderBtn').disabled = true;
+                
+                clearLog();
+                log('Workflow reset', 'info');
+            }
+        }
+
+        // Step 1: Create Order
+        document.getElementById('createOrderForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setStepStatus(1, 'active');
+            log('Creating sales order...', 'info');
+            
+            const orderData = {
+                order_number: document.getElementById('orderNumber').value,
+                customer_name: document.getElementById('customerName').value,
+                order_date: new Date().toISOString().split('T')[0],
+                delivery_date: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+                status: 'pending',
+                items: [{
+                    product_id: parseInt(document.getElementById('productId').value),
+                    quantity: parseInt(document.getElementById('quantity').value)
+                }]
+            };
+            
+            try {
+                const response = await fetch('/api/erp/orders', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(orderData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    workflowState.orderId = data.id;
+                    setStepStatus(1, 'completed');
+                    showResult(1, `Order created successfully! Order ID: ${data.id}`);
+                    log(`Order ${data.order_number} created with ID: ${data.id}`, 'success');
+                    document.getElementById('createPlanBtn').disabled = false;
+                    workflowState.currentStep = 2;
+                    setStepStatus(2, 'active');
+                } else {
+                    throw new Error(data.error || 'Failed to create order');
+                }
+            } catch (error) {
+                showResult(1, `Error: ${error.message}`, 'error');
+                log(`Error creating order: ${error.message}`, 'error');
+            }
+        });
+
+        // Step 2: Create Production Plan
+        document.getElementById('createPlanBtn').addEventListener('click', async () => {
+            setStepStatus(2, 'active');
+            log('Creating production plan...', 'info');
+            
+            const planData = {
+                start_date: new Date().toISOString().split('T')[0],
+                end_date: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0]
+            };
+            
+            try {
+                const response = await fetch(`/api/erp/orders/${workflowState.orderId}/production-plan`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(planData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    workflowState.planId = data.id;
+                    setStepStatus(2, 'completed');
+                    showResult(2, `Production plan created! Plan ID: ${data.id}`);
+                    log(`Production plan ${data.id} created for order ${workflowState.orderId}`, 'success');
+                    document.getElementById('syncToMesBtn').disabled = false;
+                    workflowState.currentStep = 3;
+                    setStepStatus(3, 'active');
+                } else {
+                    throw new Error(data.error || 'Failed to create production plan');
+                }
+            } catch (error) {
+                showResult(2, `Error: ${error.message}`, 'error');
+                log(`Error creating production plan: ${error.message}`, 'error');
+            }
+        });
+
+        // Step 3: Sync to MES
+        document.getElementById('syncToMesBtn').addEventListener('click', async () => {
+            setStepStatus(3, 'active');
+            log('Syncing data to MES...', 'info');
+            
+            try {
+                // In a real system, this would trigger the data sync service
+                // For now, we'll simulate it with a delay
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                setStepStatus(3, 'completed');
+                showResult(3, 'Data synchronized to MES successfully!');
+                log('Production plan and materials synced to MES', 'success');
+                document.getElementById('createWorkOrderBtn').disabled = false;
+                workflowState.currentStep = 4;
+                setStepStatus(4, 'active');
+            } catch (error) {
+                showResult(3, `Error: ${error.message}`, 'error');
+                log(`Error syncing to MES: ${error.message}`, 'error');
+            }
+        });
+
+        // Step 4: Create Work Order
+        document.getElementById('createWorkOrderBtn').addEventListener('click', async () => {
+            setStepStatus(4, 'active');
+            log('Creating work order in MES...', 'info');
+            
+            const workOrderData = {
+                work_order_number: `WO-${Date.now()}`,
+                production_plan_id: workflowState.planId,
+                product_id: parseInt(document.getElementById('productId').value),
+                quantity: parseInt(document.getElementById('quantity').value),
+                status: 'pending',
+                priority: 'normal',
+                scheduled_start: new Date().toISOString(),
+                scheduled_end: new Date(Date.now() + 7*24*60*60*1000).toISOString()
+            };
+            
+            try {
+                const response = await fetch('/api/mes/work-orders', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(workOrderData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    workflowState.workOrderId = data.id;
+                    setStepStatus(4, 'completed');
+                    showResult(4, `Work order created! WO ID: ${data.id}`);
+                    log(`Work order ${data.work_order_number} created with ID: ${data.id}`, 'success');
+                    document.getElementById('assignMachineBtn').disabled = false;
+                    workflowState.currentStep = 5;
+                    setStepStatus(5, 'active');
+                } else {
+                    throw new Error(data.error || 'Failed to create work order');
+                }
+            } catch (error) {
+                showResult(4, `Error: ${error.message}`, 'error');
+                log(`Error creating work order: ${error.message}`, 'error');
+            }
+        });
+
+        // Step 5: Assign to Machine
+        document.getElementById('assignMachineBtn').addEventListener('click', async () => {
+            workflowState.machineId = document.getElementById('machineId').value;
+            log(`Assigning work order to machine ${workflowState.machineId}...`, 'info');
+            
+            try {
+                // Send work order to PCS
+                const response = await fetch('/api/pcs/work-orders', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        work_order_id: workflowState.workOrderId,
+                        machine_id: workflowState.machineId,
+                        product_id: parseInt(document.getElementById('productId').value),
+                        quantity: parseInt(document.getElementById('quantity').value)
+                    })
+                });
+                
+                if (response.ok) {
+                    showResult(5, `Work order assigned to Machine ${workflowState.machineId}`);
+                    log(`Work order assigned to machine ${workflowState.machineId}`, 'success');
+                    document.getElementById('startProductionBtn').disabled = false;
+                } else {
+                    throw new Error('Failed to assign work order');
+                }
+            } catch (error) {
+                showResult(5, `Error: ${error.message}`, 'error');
+                log(`Error assigning to machine: ${error.message}`, 'error');
+            }
+        });
+
+        // Step 5: Start Production
+        document.getElementById('startProductionBtn').addEventListener('click', async () => {
+            log(`Starting production on machine ${workflowState.machineId}...`, 'info');
+            
+            try {
+                const response = await fetch(`/api/pcs/machines/${workflowState.machineId}/start`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    setStepStatus(5, 'completed');
+                    showResult(5, `Production started on Machine ${workflowState.machineId}!`);
+                    log(`Production started on machine ${workflowState.machineId}`, 'success');
+                    workflowState.currentStep = 6;
+                    setStepStatus(6, 'active');
+                    startProductionMonitoring();
+                } else {
+                    throw new Error('Failed to start machine');
+                }
+            } catch (error) {
+                showResult(5, `Error: ${error.message}`, 'error');
+                log(`Error starting production: ${error.message}`, 'error');
+            }
+        });
+
+        // Step 6: Monitor Production
+        let monitoringInterval = null;
+        function startProductionMonitoring() {
+            log('Production monitoring started', 'info');
+            
+            monitoringInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/pcs/machines/status');
+                    const data = await response.json();
+                    const machineStatus = data[workflowState.machineId];
+                    
+                    if (machineStatus) {
+                        const statusHtml = `
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Status:</strong> ${machineStatus.running ? 'Running' : 'Stopped'}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Phase:</strong> ${machineStatus.current_phase || 'Idle'}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Cycles:</strong> ${machineStatus.cycle_count || 0}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Target:</strong> ${document.getElementById('quantity').value}
+                                </div>
+                            </div>
+                        `;
+                        document.getElementById('productionStatus').innerHTML = statusHtml;
+                        
+                        // Check if production is complete
+                        if (machineStatus.cycle_count >= parseInt(document.getElementById('quantity').value)) {
+                            clearInterval(monitoringInterval);
+                            setStepStatus(6, 'completed');
+                            showResult(6, 'Production completed!');
+                            log('Production completed successfully', 'success');
+                            document.getElementById('completeOrderBtn').disabled = false;
+                            workflowState.currentStep = 7;
+                            setStepStatus(7, 'active');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error monitoring production:', error);
+                }
+            }, 2000);
+        }
+
+        // Step 7: Complete Order
+        document.getElementById('completeOrderBtn').addEventListener('click', async () => {
+            setStepStatus(7, 'active');
+            log('Completing order...', 'info');
+            
+            try {
+                // Update order status
+                const response = await fetch(`/api/erp/orders/${workflowState.orderId}/status`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ status: 'completed' })
+                });
+                
+                if (response.ok) {
+                    setStepStatus(7, 'completed');
+                    showResult(7, 'Order completed successfully! 🎉');
+                    log('Order marked as completed', 'success');
+                    log('Workflow completed successfully!', 'success');
+                } else {
+                    throw new Error('Failed to complete order');
+                }
+            } catch (error) {
+                showResult(7, `Error: ${error.message}`, 'error');
+                log(`Error completing order: ${error.message}`, 'error');
+            }
+        });
+
+        function loadExistingOrders() {
+            window.location.href = '/erp';
+        }
+
+        // Initialize
+        log('Workflow page loaded. Ready to process orders.', 'info');
+    </script>
+</body>
+</html>

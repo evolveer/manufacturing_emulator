@@ -1,34 +1,35 @@
 #!/bin/bash
 
-# Shutdown script for Manufacturing Emulator System
-# This script stops all components of the manufacturing emulator system
-
 echo "Stopping Manufacturing Emulator System..."
 
-# Function to stop a component
-stop_component() {
-    component=$1
-    if [ -f logs/$component.pid ]; then
-        pid=$(cat logs/$component.pid)
-        echo "Stopping $component (PID: $pid)..."
-        kill $pid 2>/dev/null || true
-        rm logs/$component.pid
-        echo "$component stopped"
+cd /home/ubuntu/manufacturing_emulator
+
+# Function to stop a service
+stop_service() {
+    local pid_file=$1
+    local name=$2
+    
+    if [ -f "$pid_file" ]; then
+        local pid=$(cat "$pid_file")
+        if ps -p $pid > /dev/null 2>&1; then
+            kill $pid
+            echo "✓ Stopped $name (PID: $pid)"
+        else
+            echo "✗ $name was not running"
+        fi
+        rm -f "$pid_file"
     else
-        echo "$component not running"
+        echo "✗ No PID file found for $name"
     fi
 }
 
-# Stop Interface
-stop_component "common"
+# Stop all services
+stop_service "logs/interface.pid" "Unified Interface"
+stop_service "logs/pcs.pid" "PCS Service"
+stop_service "logs/mes.pid" "MES Service"
+stop_service "logs/erp.pid" "ERP Service"
 
-# Stop PCS
-stop_component "pcs"
-
-# Stop MES
-stop_component "mes"
-
-# Stop ERP
-stop_component "erp"
-
-echo "All components stopped"
+echo ""
+echo "=================================================="
+echo "System stopped successfully!"
+echo "=================================================="
