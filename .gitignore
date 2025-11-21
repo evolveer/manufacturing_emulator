@@ -6,7 +6,8 @@ logs/*.log
 
 # C extensions
 *.so
-
+*.pyc
+*,db
 
 *.log
 # Distribution / packaging

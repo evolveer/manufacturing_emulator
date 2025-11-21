@@ -490,7 +490,7 @@ class CycleDataService:
         session = get_db_session()
         try:
             cycles = session.query(CycleData).filter(
-                CycleData.status == 'completed'
+                CycleData.status == 'ready_for_sync'
             ).all()
             return cycles
         finally:

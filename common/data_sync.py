@@ -211,54 +211,63 @@ class DataSynchronizer:
     def _sync_production_plans(self):
         """Synchronize production plans from ERP to MES"""
         try:
-            # Get production plans from ERP
             response = requests.get(f"{self.erp_url}/production-plans")
             if response.status_code != 200:
                 logger.error(f"Failed to get production plans from ERP: {response.text}")
                 return
             
             production_plans = response.json()
+            if not production_plans:
+                logger.info("🛠️ No production plans found in ERP to sync.")
+                return
             
+            logger.info(f"📦 Found {len(production_plans)} production plans to sync.")
+
             for plan in production_plans:
-                # Check if production plan already exists in MES
+                if not plan.get('id'):
+                    logger.warning(f"⚠️ Skipping plan without ID: {plan}")
+                    continue
+
+                logger.info(f"🔄 Syncing production plan {plan['id']}...")
+
+                # 1. Check if plan exists in MES
                 response = requests.get(f"{self.mes_url}/production-plans/{plan['id']}")
                 
                 if response.status_code == 404:
-                    # Create production plan
+                    logger.info(f"Production plan {plan['id']} not found in MES, creating it...")
                     create_response = requests.post(f"{self.mes_url}/production-plans", json=plan)
-                    if create_response.status_code == 201:
-                        logger.info(f"Created production plan {plan['id']} in MES")
-                    else:
-                        logger.error(f"Failed to create production plan {plan['id']} in MES: {create_response.text}")
+                    if create_response.status_code != 201:
+                        logger.error(f"❌ Failed to create production plan {plan['id']} in MES: {create_response.text}")
                         continue
+                    logger.info(f"✅ Created production plan {plan['id']} in MES.")
                 elif response.status_code != 200:
-                    logger.error(f"Failed to check production plan {plan['id']} in MES: {response.text}")
+                    logger.error(f"❌ Failed checking production plan {plan['id']} in MES: {response.text}")
                     continue
 
-                # Now production plan exists (either already or just created)
-                # --> Check if work orders exist
+                # 2. Check if work orders exist
                 work_orders_response = requests.get(f"{self.mes_url}/production-plans/{plan['id']}/work-orders")
                 if work_orders_response.status_code == 404:
-                    logger.info(f"No work orders for production plan {plan['id']} in MES yet.")
+                    logger.info(f"No work orders found for production plan {plan['id']}.")
                     existing_work_orders = []
                 elif work_orders_response.status_code == 200:
                     existing_work_orders = work_orders_response.json()
                 else:
-                    logger.error(f"Failed to check work orders for plan {plan['id']}: {work_orders_response.text}")
+                    logger.error(f"❌ Failed checking work orders for plan {plan['id']}: {work_orders_response.text}")
                     continue
-                
-                # If no work orders, create them
-                if not existing_work_orders:
-                    create_work_orders_response = requests.post(f"{self.mes_url}/production-plans/{plan['id']}/generate-work-orders")
-                    if create_work_orders_response.status_code == 201:
-                        logger.info(f"Created work orders for production plan {plan['id']} in MES")
-                    else:
-                        logger.error(f"Failed to create work orders for plan {plan['id']}: {create_work_orders_response.text}")
 
-            logger.info(f"Synchronized {len(production_plans)} production plans from ERP to MES")
+                # 3. Create work orders if needed
+                if not existing_work_orders:
+                    logger.info(f"🛠️ Generating work orders for production plan {plan['id']}...")
+                    create_work_orders_response = requests.post(f"{self.mes_url}/production-plans/{plan['id']}/generate-work-orders")
+                    if create_work_orders_response.status_code != 201:
+                        logger.error(f"❌ Failed to create work orders for plan {plan['id']}: {create_work_orders_response.text}")
+                    else:
+                        logger.info(f"✅ Created work orders for production plan {plan['id']}.")
+
+            logger.info(f"✅ Synchronized {len(production_plans)} production plans from ERP to MES.")
 
         except Exception as e:
-            logger.error(f"Error synchronizing production plans: {str(e)}")
+            logger.error(f"❌ Error synchronizing production plans: {str(e)}")
 
                     
     def _sync_materials(self):

@@ -326,7 +326,25 @@ class ProductService:
             raise e
         finally:
             close_db_session(session)
-
+    
+    @staticmethod
+    def get_all_bom():
+        """Get all BOM entries"""
+        session = get_db_session()
+        try:
+            bom_entries = session.query(BOMItem).all()
+            result = []
+            for entry in bom_entries:
+                result.append({
+                    'product_id': entry.product_id,
+                    'material_id': entry.material_id,
+                    'quantity': entry.quantity
+                })
+            return jsonify(result), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            close_db_session(session)
 
 class OrderService:
     """Service for order management"""

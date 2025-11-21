@@ -6,7 +6,7 @@ import os
 import yaml
 from flask import Flask, request, jsonify,render_template, send_from_directory
 from flask_restful import Api, Resource
-from services import MaterialService, ProductService, OrderService, ProductionPlanService,MaterialTransactionService
+from services import MaterialService, ProductService, OrderService, ProductionPlanService,MaterialTransactionService, BOMItem
 
 
 
@@ -317,7 +317,13 @@ class ProductBOMItemAPI(Resource):
         except Exception as e:
             return {'error': str(e)}, 500
 
-
+class BOMAPI(Resource):
+    def get(self):
+        try:
+            bom = BOMItem.get_all_bom()
+            return bom
+        except Exception as e:
+            return {'error': str(e)}, 500    
 
 
 # Orders API
@@ -561,7 +567,10 @@ api.add_resource(ProductListAPI, f'{API_PREFIX}/products')
 api.add_resource(ProductAPI, f'{API_PREFIX}/products/<int:product_id>')
 api.add_resource(ProductByCodeAPI, f'{API_PREFIX}/products/code/<string:code>')
 api.add_resource(ProductBOMAPI, f'{API_PREFIX}/products/<int:product_id>/bom')
+
 api.add_resource(ProductBOMItemAPI, f'{API_PREFIX}/products/<int:product_id>/bom/<int:material_id>')
+
+api.add_resource(BOMAPI, f'{API_PREFIX}/bom')
 
 api.add_resource(OrderListAPI, f'{API_PREFIX}/orders')
 api.add_resource(OrderAPI, f'{API_PREFIX}/orders/<int:order_id>')

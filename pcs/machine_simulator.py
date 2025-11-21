@@ -241,29 +241,41 @@ class InjectionMoldingMachine:
             self._update_machine_state('running')
             
             while not self.stop_event.is_set():
-                if not self._run_cycle():
+                should_continue = self._run_cycle()
+                if not should_continue:
                     logger.info(f"Machine {self.machine_id} stopping after completing work order.")
                     return  # Exit the loop and function cleanly
-                
+            
             logger.info(f"Machine {self.machine_id} simulation loop ended")
         except Exception as e:
             logger.error(f"Error in simulation loop: {str(e)}")
             # Update machine state to error
             self._update_machine_state('error')
             self._create_alarm('SIM_ERROR', f"Simulation error: {str(e)}", 'error')
+
     
     def _run_cycle(self):
         """Run a single production cycle"""
+        
 
-        if self.stop_event.is_set():
-            return False  # Don't run if stop requested
+        # Get production summary before starting
+        summary = self._get_current_production_summary()
+
+        # Check if enough good parts have been produced
+        if summary and summary['total_good'] >= self.work_order_target_quantity:
+            logger.info(f"✅ Machine {self.machine_id}: Target GOOD parts reached ({summary['total_good']}/{self.work_order_target_quantity}). Stopping...")
+            self.stop()
+            self._mark_work_order_completed(self.current_work_order_id)
+            return  # Do NOT run another cycle
+
+        # Now continue with normal cycle
         cycle_start_time = datetime.datetime.utcnow()
         self.current_cycle_start_time = cycle_start_time
         self.cycle_count += 1
         
         # Create cycle record in database
         cycle_id = self._create_cycle_record(cycle_start_time)
-        self.current_cycle_id = cycle_ids
+        self.current_cycle_id = cycle_id
         
         try:
             # Run through each phase of the cycle
@@ -305,12 +317,7 @@ class InjectionMoldingMachine:
             # ➡️ NEW: Mark that this cycle is ready to sync (for DataSynchronizer)
             self._mark_cycle_ready_for_sync(cycle_id)
             
-            if self.current_work_order_id and self.work_order_target_quantity:
-                if self.cycle_count >= self.work_order_target_quantity:
-                    logger.info(f"Machine {self.machine_id} reached target for work order {self.current_work_order_id}, stopping...")
-                    self.stop()  # Gracefully stops the machine
-                    self._mark_work_order_completed(self.current_work_order_id)
-                    return False  # Tell loop to exit
+
             # Simulate random alarms (0.01% chance)
             if random.random() < 0.0001:
                 self._create_random_alarm()
@@ -603,7 +610,7 @@ class InjectionMoldingMachine:
         """Optionally mark the cycle as ready to be synced by DataSynchronizer."""
         session = get_db_session()
         try:
-            cycle = session.query(CycleData).filter(CycleData.id == cycle_id).first()
+            cycle = session.query(CycleData).filter(CycleData.id == self.current_cycle_id).first()
             if cycle:
                 cycle.status = 'ready_for_sync'  # or a custom field, or just rely on 'completed' status
                 session.commit()
@@ -631,8 +638,19 @@ class InjectionMoldingMachine:
                 logger.error(f"❌ Failed to increment cycle for work order {work_order_id}: {response.text}")
         except Exception as e:
             logger.error(f"❌ Exception notifying cycle complete: {e}")
-
-        
+    #messy....needs to be changed MES should just give information to stop when the summary is correct ..
+    def _get_current_production_summary(self):
+        """Fetch the current production summary from MES"""
+        try:
+            response = requests.get(f"http://localhost:5002/api/v1/work-orders/{self.current_work_order_id}/production-summary")
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Failed to get production summary: {response.text}")
+        except Exception as e:
+            logger.error(f"Exception while getting production summary: {e}")
+        return None
+   
 
 
 class MachineSimulatorManager:
