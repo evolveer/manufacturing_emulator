@@ -1,113 +1,66 @@
 #!/bin/bash
 
-# Enhanced start script for Manufacturing Emulator System
-# This script includes additional checks and error handling
+echo "Starting Enhanced Manufacturing Emulator System..."
+echo "=================================================="
+
+cd ./
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
-# Function to check if port is in use
-check_port() {
+# Start ERP Service (with Master Data UI)
+echo "Starting ERP Service (Master Data) on port 5001..."
+nohup python3 erp/master_data_server.py > logs/erp.log 2>&1 & echo $! > logs/erp.pid
+sleep 2
+
+# Start MES Service
+echo "Starting MES Service on port 5002..."
+nohup python3 mes/main.py > logs/mes.log 2>&1 & echo $! > logs/mes.pid
+sleep 2
+
+# Start PCS Service
+echo "Starting PCS Service on port 5003..."
+nohup python3 pcs/main.py > logs/pcs.log 2>&1 & echo $! > logs/pcs.pid
+sleep 2
+
+# Start Unified Interface
+echo "Starting Unified Interface on port 5000..."
+nohup python3 common/interface.py > logs/interface.log 2>&1 & echo $! > logs/interface.pid
+sleep 3
+
+# Check if services are running
+echo ""
+echo "Checking service status..."
+echo "=================================================="
+
+check_service() {
     local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null ; then
-        echo "Warning: Port $port is already in use. This may cause conflicts."
-        return 1
+    local name=$2
+    if curl -s http://localhost:$port/api/v1/status > /dev/null 2>&1; then
+        echo "✓ $name is running on port $port"
+    else
+        echo "✗ $name failed to start on port $port"
     fi
-    return 0
 }
 
-# Function to start a component with error handling
-start_component() {
-    component=$1
-    port=$2
-    
-    echo "Starting $component on port $port..."
-    
-    # Check if port is available
-    check_port $port
-    
-    # Create log file
-    touch logs/$component.log
-    
-    if [ "$component" = "common" ]; then
-        # Special case for interface component
-        if [ -f common/interface.py ]; then
-            python3 common/interface.py > logs/interface.log 2>&1 &
-            echo $! > logs/interface.pid
-            echo "$component started with PID $(cat logs/interface.pid)"
-        else
-            echo "Error: interface.py not found in common directory"
-            return 1
-        fi
-    else
-        # Normal case for other components
-        if [ -f $component/main.py ]; then
-            python3 $component/main.py > logs/$component.log 2>&1 &
-            echo $! > logs/$component.pid
-            echo "$component started with PID $(cat logs/$component.pid)"
-        else
-            echo "Error: main.py not found in $component directory"
-            return 1
-        fi
-    fi
-    
-    # Wait a moment to ensure process starts
-    sleep 2
-    
-    # Verify process is still running
-    if [ -f logs/$component.pid ]; then
-        pid=$(cat logs/$component.pid)
-        if ps -p $pid > /dev/null; then
-            echo "$component is running correctly"
-        else
-            echo "Warning: $component process started but exited immediately. Check logs/$([ "$component" = "common" ] && echo "interface" || echo "$component").log for errors."
-        fi
-    fi
-}
-# Initialize databases if needed
-if [ ! -f database/database/erp.db ] || [ ! -f database/database/mes.db ] || [ ! -f database/database/pcs.db ]; then
-    echo "Initializing databases..."
-    mkdir -p database/database
-    if [ -f database/init_db.py ]; then
-        python3 database/init_db.py
-    else
-        echo "Warning: Database initialization script not found"
-    fi
-fi
+check_service 5001 "ERP"
+check_service 5002 "MES"
+check_service 5003 "PCS"
+check_service 5000 "Interface"
 
-# Start all components
-echo "Starting Manufacturing Emulator System..."
-start_component "erp" 5001
-start_component "mes" 5002
-start_component "pcs" 5003
-start_component "common" 5000
-
-# Verify all components are running
-echo "Verifying all components..."
-all_running=true
-for component in erp mes pcs common; do
-    pid_file="logs/$([ "$component" = "common" ] && echo "interface" || echo "$component").pid"
-    if [ -f "$pid_file" ]; then
-        pid=$(cat "$pid_file")
-        if ! ps -p $pid > /dev/null; then
-            echo "Error: $component is not running"
-            all_running=false
-        fi
-    else
-        echo "Error: PID file for $component not found"
-        all_running=false
-    fi
-done
-
-if $all_running; then
-    echo "All components started successfully."
-    echo "You can access the system at:"
-    echo "- Main dashboard: http://localhost:5000"
-    echo "- ERP interface: http://localhost:5001"
-    echo "- MES interface: http://localhost:5002"
-    echo "- PCS interface: http://localhost:5003"
-else
-    echo "Some components failed to start. Check the logs for details."
-fi
-
-echo "Use ./stop.sh to stop all components."
+echo ""
+echo "=================================================="
+echo "System started successfully!"
+echo ""
+echo "Access the system at: http://localhost:5000"
+echo ""
+echo "Available pages:"
+echo "  - Main Dashboard:    http://localhost:5000/"
+echo "  - Order Workflow:    http://localhost:5000/order-workflow"
+echo "  - PCS (Alarms):      http://localhost:5000/pcs"
+echo "  - ERP Dashboard:     http://localhost:5000/erp"
+echo "  - MES Dashboard:     http://localhost:5000/mes"
+echo "ERP Master Data UI: http://localhost:5001/master_data"
+echo ""
+echo "To stop the system, run: ./stop.sh"
+echo "=================================================="
