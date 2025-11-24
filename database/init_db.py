@@ -7,8 +7,8 @@ import sys
 import sqlite3
 from pathlib import Path
 
-# Ensure we're in the project root directory
-project_root = Path(__file__).parent.absolute()
+# Ensure we're in the project root directory (one level above this file)
+project_root = Path(__file__).resolve().parent.parent
 os.chdir(project_root)
 
 # Create database directory if it doesn't exist
@@ -46,6 +46,8 @@ def init_erp_db():
         description TEXT,
         category TEXT,
         price REAL NOT NULL,
+        stock_quantity REAL NOT NULL DEFAULT 0,
+        min_stock_level REAL NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -104,6 +106,52 @@ def init_erp_db():
         FOREIGN KEY (order_id) REFERENCES orders (id)
     )
     ''')
+
+    # Material transactions table (for tracking consumption/production)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS material_transactions (
+        id INTEGER PRIMARY KEY,
+        material_id INTEGER NOT NULL,
+        quantity REAL NOT NULL,
+        transaction_type TEXT NOT NULL,
+        reference_id INTEGER,
+        reference_type TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (material_id) REFERENCES materials (id)
+    )
+    ''')
+
+    # Shipments (ERP)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS shipments (
+        id INTEGER PRIMARY KEY,
+        shipment_number TEXT UNIQUE NOT NULL,
+        order_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        carrier TEXT,
+        tracking_number TEXT,
+        shipping_address TEXT,
+        packed_date TIMESTAMP,
+        shipped_date TIMESTAMP,
+        estimated_delivery TIMESTAMP,
+        delivered_date TIMESTAMP,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (order_id) REFERENCES orders (id)
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS shipment_items (
+        id INTEGER PRIMARY KEY,
+        shipment_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        quantity INTEGER NOT NULL,
+        FOREIGN KEY (shipment_id) REFERENCES shipments (id),
+        FOREIGN KEY (product_id) REFERENCES products (id)
+    )
+    ''')
     
     # Insert sample data for materials
     cursor.execute('''
@@ -160,6 +208,7 @@ def init_mes_db():
         start_time TIMESTAMP,
         end_time TIMESTAMP,
         machine_id INTEGER,
+        inventory_posted BOOLEAN DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -282,6 +331,19 @@ def init_pcs_db():
     conn = sqlite3.connect(db_dir / "pcs.db")
     cursor = conn.cursor()
     
+    # Commands table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS machine_commands (
+        id INTEGER PRIMARY KEY,
+        machine_id INTEGER NOT NULL,
+        command_type TEXT NOT NULL,
+        parameters TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status TEXT NOT NULL,
+        response TEXT
+    )
+    ''')
+
     # Create Machine Parameters table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS machine_parameters (

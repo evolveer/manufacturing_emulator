@@ -193,13 +193,21 @@
 
         async function updateWorkOrderStatus(workOrderId, status, machineId) {
             try {
+                const response = await fetch(`/api/mes/work-orders/${workOrderId}/status`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ status })
+                });
+                if (!response.ok) throw new Error('Failed to update work order');
+
                 // Require machine assignment for planning/starting
                 if ((status === 'planned' || status === 'in_progress') && !machineId) {
                     alert('Assign a machine to this work order before continuing.');
+                    await loadWorkOrders();
                     return;
                 }
 
-                // For in_progress, start PCS first; only update MES status if PCS start succeeds
+                // Kick off PCS when moving to in_progress
                 if (status === 'in_progress') {
                     const pcsResp = await fetch(`/api/pcs/machines/${machineId}/start`, {
                         method: 'POST',
@@ -211,14 +219,6 @@
                         throw new Error(`PCS start failed: ${errText || pcsResp.statusText}`);
                     }
                 }
-
-                const response = await fetch(`/api/mes/work-orders/${workOrderId}/status`, {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ status })
-                });
-                if (!response.ok) throw new Error('Failed to update work order');
-
                 await loadWorkOrders();
             } catch (err) {
                 alert(err.message);

@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shipping Workflow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .status-pending { background-color: #ffc107; color: #000; }
+        .status-packed { background-color: #17a2b8; color: #fff; }
+        .status-shipped { background-color: #007bff; color: #fff; }
+        .status-in_transit { background-color: #6610f2; color: #fff; }
+        .status-delivered { background-color: #28a745; color: #fff; }
+        .status-cancelled { background-color: #dc3545; color: #fff; }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #dee2e6;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 5px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dee2e6;
+            border: 2px solid white;
+        }
+        .timeline-item.completed::before {
+            background: #28a745;
+        }
+        .timeline-item.active::before {
+            background: #007bff;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .shipment-card {
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .shipment-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Manufacturing Emulator</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/erp">ERP</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mes">MES</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pcs">PCS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/order-workflow">Order Workflow</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/shipping-workflow">Shipping</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-md-8">
+                <h1>Shipping Workflow</h1>
+                <p class="text-muted">Manage shipments and track delivery status</p>
+
+                <!-- Create Shipment Section -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-box-seam"></i> Create New Shipment</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="createShipmentForm">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Shipment Number</label>
+                                    <input type="text" class="form-control" id="shipmentNumber" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Order</label>
+                                    <select class="form-select" id="orderSelect" required></select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Carrier</label>
+                                    <select class="form-select" id="carrier">
+                                        <option value="FedEx">FedEx</option>
+                                        <option value="UPS">UPS</option>
+                                        <option value="DHL">DHL</option>
+                                        <option value="USPS">USPS</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Tracking Number</label>
+                                    <input type="text" class="form-control" id="trackingNumber">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Shipping Address</label>
+                                <textarea class="form-control" id="shippingAddress" rows="2"></textarea>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Product</label>
+                                    <input type="text" class="form-control" id="productId" readonly>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Quantity</label>
+                                    <input type="number" class="form-control" id="quantity" required>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> Create Shipment
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Shipments List -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-list-ul"></i> Active Shipments</h5>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadShipments()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="shipmentsList">
+                            <p class="text-muted text-center">No shipments found</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <!-- Selected Shipment Details -->
+                <div class="card sticky-top" style="top: 20px;">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Shipment Details</h5>
+                    </div>
+                    <div class="card-body" id="shipmentDetails">
+                        <p class="text-muted text-center">Select a shipment to view details</p>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="quickActions">
+                            <p class="text-muted text-center">Select a shipment first</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let selectedShipmentId = null;
+        const ERP_API = '/api/erp';
+        let shipmentOrders = [];
+
+        // Generate random shipment number
+        function generateShipmentNumber() {
+            return 'SHIP-' + Date.now().toString().slice(-8);
+        }
+
+        // Generate random tracking number
+        function generateTrackingNumber() {
+            return '1Z' + Math.random().toString(36).substring(2, 15).toUpperCase();
+        }
+
+        // Initialize form with random values
+        document.getElementById('shipmentNumber').value = generateShipmentNumber();
+        document.getElementById('trackingNumber').value = generateTrackingNumber();
+        preloadOrdersForShipment();
+        ensureBaselineShipments();
+
+        async function preloadOrdersForShipment() {
+            try {
+                const [ordersResp, shipmentsResp] = await Promise.all([
+                    fetch(`${ERP_API}/orders`),
+                    fetch(`${ERP_API}/shipments`).catch(() => ({ json: async () => [] }))
+                ]);
+                const orders = await ordersResp.json();
+                const shipments = await shipmentsResp.json();
+                const shippedOrders = new Set(
+                    (shipments || [])
+                        .filter(s => ['shipped', 'in_transit', 'delivered'].includes(s.status))
+                        .map(s => s.order_id)
+                );
+                const select = document.getElementById('orderSelect');
+                select.innerHTML = '<option value=\"\">Select order for shipment...</option>';
+                (orders || [])
+                    .filter(o => o.status !== 'cancelled' and not shippedOrders.has(o.id))
+                    .forEach(order => {
+                        const item = order.items && order.items[0];
+                        const label = `${order.order_number || order.id} [${order.status}] - ${item ? `Prod ${item.product_id} x${item.quantity}` : 'No items'}`;
+                        const opt = document.createElement('option');
+                        opt.value = order.id;
+                        opt.textContent = label;
+                        opt.dataset.productId = item ? item.product_id : '';
+                        opt.dataset.quantity = item ? item.quantity : '';
+                        select.appendChild(opt);
+                    });
+                select.onchange = () => {
+                    const opt = select.selectedOptions[0];
+                    const prod = opt?.dataset?.productId || '';
+                    const qty = opt?.dataset?.quantity || '';
+                    document.getElementById('productId').value = prod;
+                    document.getElementById('quantity').value = qty;
+                };
+            } catch (err) {
+                console.error('Error loading orders for shipment form', err);
+            }
+        }
+
+        // Create shipment
+        document.getElementById('createShipmentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const shipmentData = {
+                shipment_number: document.getElementById('shipmentNumber').value,
+                order_id: parseInt(document.getElementById('orderSelect').value),
+                status: 'pending',
+                carrier: document.getElementById('carrier').value,
+                tracking_number: document.getElementById('trackingNumber').value,
+                shipping_address: document.getElementById('shippingAddress').value,
+                items: [{
+                    product_id: parseInt(document.getElementById('productId').value),
+                    quantity: parseInt(document.getElementById('quantity').value)
+                }]
+            };
+            
+            try {
+                const response = await fetch(`${ERP_API}/shipments`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(shipmentData)
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    alert(`Shipment created successfully! ID: ${data.id}`);
+                    document.getElementById('shipmentNumber').value = generateShipmentNumber();
+                    document.getElementById('trackingNumber').value = generateTrackingNumber();
+                    loadShipments();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error || 'Failed to create shipment'}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        });
+
+        // Load all shipments
+        async function loadShipments() {
+            try {
+                const response = await fetch(`${ERP_API}/shipments`);
+                const shipments = await response.json();
+                
+                const listDiv = document.getElementById('shipmentsList');
+                
+                if (shipments.length === 0) {
+                    listDiv.innerHTML = '<p class="text-muted text-center">No shipments found</p>';
+                    return;
+                }
+                
+                listDiv.innerHTML = shipments.map(shipment => `
+                    <div class="shipment-card card mb-2" onclick="selectShipment(${shipment.id})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">${shipment.shipment_number}</h6>
+                                    <small class="text-muted">Order #${shipment.order_id} | ${shipment.carrier || 'N/A'}</small>
+                                </div>
+                                <span class="status-badge status-${shipment.status}">${shipment.status.replace('_', ' ').toUpperCase()}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading shipments:', error);
+            }
+        }
+
+        // Ensure at least two ready-to-ship (packed) shipments for demo purposes
+        async function ensureBaselineShipments() {
+            try {
+                const [shipmentsResp, ordersResp] = await Promise.all([
+                    fetch(`${ERP_API}/shipments`),
+                    fetch(`${ERP_API}/orders`)
+                ]);
+                const shipments = await shipmentsResp.json();
+                const orders = await ordersResp.json();
+
+                const ready = (shipments || []).filter(s => ['pending', 'packed'].includes(s.status));
+                if (ready.length >= 2) return;
+
+                // pick completed orders without shipped/delivered shipments
+                const shippedOrders = new Set(
+                    (shipments || [])
+                        .filter(s => ['shipped', 'in_transit', 'delivered'].includes(s.status))
+                        .map(s => s.order_id)
+                );
+                const candidates = (orders || []).filter(o => o.status === 'completed' && !shippedOrders.has(o.id));
+
+                let created = 0;
+                for (const order of candidates) {
+                    if (ready.length + created >= 2) break;
+                    const item = order.items && order.items[0];
+                    if (!item) continue;
+                    const payload = {
+                        shipment_number: generateShipmentNumber(),
+                        order_id: order.id,
+                        status: 'packed',
+                        carrier: 'DemoCarrier',
+                        tracking_number: generateTrackingNumber(),
+                        items: [{
+                            product_id: item.product_id,
+                            quantity: item.quantity
+                        }]
+                    };
+                    const resp = await fetch(`${ERP_API}/shipments`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+                    if (resp.ok) {
+                        created += 1;
+                    }
+                }
+            } catch (err) {
+                console.error('Baseline shipment setup failed', err);
+            }
+        }
+
+        // Select and display shipment details
+        async function selectShipment(shipmentId) {
+            selectedShipmentId = shipmentId;
+            
+            try {
+                const response = await fetch(`${ERP_API}/shipments/${shipmentId}`);
+                const shipment = await response.json();
+                
+                const detailsDiv = document.getElementById('shipmentDetails');
+                detailsDiv.innerHTML = `
+                    <h6>${shipment.shipment_number}</h6>
+                    <hr>
+                    <p><strong>Status:</strong> <span class="status-badge status-${shipment.status}">${shipment.status.replace('_', ' ').toUpperCase()}</span></p>
+                    <p><strong>Order ID:</strong> ${shipment.order_id}</p>
+                    <p><strong>Carrier:</strong> ${shipment.carrier || 'N/A'}</p>
+                    <p><strong>Tracking:</strong> ${shipment.tracking_number || 'N/A'}</p>
+                    <p><strong>Address:</strong><br>${shipment.shipping_address || 'N/A'}</p>
+                    
+                    <hr>
+                    <h6>Timeline</h6>
+                    <div class="timeline">
+                        ${generateTimeline(shipment)}
+                    </div>
+                    
+                    <hr>
+                    <h6>Items</h6>
+                    ${shipment.items.map(item => `
+                        <p class="mb-1">
+                            <strong>${item.product ? item.product.name : 'Product #' + item.product_id}</strong><br>
+                            Quantity: ${item.quantity}
+                        </p>
+                    `).join('')}
+                `;
+                
+                // Update quick actions
+                updateQuickActions(shipment);
+            } catch (error) {
+                console.error('Error loading shipment details:', error);
+            }
+        }
+
+        // Generate timeline based on shipment status
+        function generateTimeline(shipment) {
+            const statuses = ['pending', 'packed', 'shipped', 'in_transit', 'delivered'];
+            const currentIndex = statuses.indexOf(shipment.status);
+            
+            return statuses.map((status, index) => {
+                let className = 'timeline-item';
+                if (index < currentIndex) className += ' completed';
+                if (index === currentIndex) className += ' active';
+                
+                let date = '';
+                if (status === 'packed' && shipment.packed_date) date = new Date(shipment.packed_date).toLocaleString();
+                if (status === 'shipped' && shipment.shipped_date) date = new Date(shipment.shipped_date).toLocaleString();
+                if (status === 'delivered' && shipment.delivered_date) date = new Date(shipment.delivered_date).toLocaleString();
+                
+                return `
+                    <div class="${className}">
+                        <strong>${status.replace('_', ' ').toUpperCase()}</strong>
+                        ${date ? `<br><small class="text-muted">${date}</small>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update quick actions based on current status
+        function updateQuickActions(shipment) {
+            const actionsDiv = document.getElementById('quickActions');
+            const statusFlow = {
+                'pending': 'packed',
+                'packed': 'shipped',
+                'shipped': 'in_transit',
+                'in_transit': 'delivered'
+            };
+            
+            const nextStatus = statusFlow[shipment.status];
+            
+            let html = '';
+            
+            if (nextStatus) {
+                html += `
+                    <button class="btn btn-primary w-100 mb-2" onclick="updateStatus('${nextStatus}')">
+                        <i class="bi bi-arrow-right-circle"></i> Move to ${nextStatus.replace('_', ' ').toUpperCase()}
+                    </button>
+                `;
+            }
+            
+            if (shipment.status === 'pending' || shipment.status === 'packed') {
+                html += `
+                    <button class="btn btn-warning w-100 mb-2" onclick="startSimulation()">
+                        <i class="bi bi-play-circle"></i> Start Auto-Simulation
+                    </button>
+                `;
+            }
+            
+            html += `
+                <button class="btn btn-danger w-100 mb-2" onclick="cancelShipment()">
+                    <i class="bi bi-x-circle"></i> Cancel Shipment
+                </button>
+                <hr>
+                <button class="btn btn-outline-secondary w-100" onclick="loadShipments()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh List
+                </button>
+            `;
+            
+            actionsDiv.innerHTML = html;
+        }
+
+        // Update shipment status
+        async function updateStatus(newStatus) {
+            if (!selectedShipmentId) return;
+            
+            try {
+                const response = await fetch(`${ERP_API}/shipments/${selectedShipmentId}/status`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ status: newStatus })
+                });
+                
+                if (response.ok) {
+                    alert(`Status updated to ${newStatus.replace('_', ' ').toUpperCase()}`);
+                    selectShipment(selectedShipmentId);
+                    loadShipments();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error || 'Failed to update status'}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Start automatic simulation
+        async function startSimulation() {
+            if (!selectedShipmentId) return;
+            
+            if (!confirm('Start automatic status progression? The shipment will move through all statuses automatically.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${ERP_API}/shipments/${selectedShipmentId}/simulate`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        timeframe_minutes: {
+                            'pending_to_packed': 0.1,
+                            'packed_to_shipped': 0.2,
+                            'shipped_to_in_transit': 0.1,
+                            'in_transit_to_delivered': 0.5
+                        }
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('Simulation started! The shipment will progress automatically. Refresh to see updates.');
+                    // Auto-refresh every 10 seconds
+                    const refreshInterval = setInterval(() => {
+                        selectShipment(selectedShipmentId);
+                        loadShipments();
+                    }, 10000);
+                    
+                    // Stop after 2 minutes
+                    setTimeout(() => clearInterval(refreshInterval), 120000);
+                } else {
+                    alert('Failed to start simulation');
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Cancel shipment
+        async function cancelShipment() {
+            if (!selectedShipmentId) return;
+            
+            if (!confirm('Are you sure you want to cancel this shipment?')) {
+                return;
+            }
+            
+            await updateStatus('cancelled');
+        }
+
+        // Load shipments on page load
+        loadShipments();
+    </script>
+</body>
+</html>

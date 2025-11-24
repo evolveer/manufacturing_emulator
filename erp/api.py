@@ -4,9 +4,12 @@ Provides REST API endpoints for the ERP emulator
 """
 import os
 import yaml
+import threading
+import time
 from flask import Flask, request, jsonify,render_template, send_from_directory
 from flask_restful import Api, Resource
 from services import MaterialService, ProductService, OrderService, ProductionPlanService,MaterialTransactionService, BOMItem
+from shipping_services import ShipmentService
 
 
 
@@ -573,6 +576,86 @@ class MaterialReservationAPI(Resource):
         except Exception as e:
             return {'error': str(e)}, 500
 
+# Shipments API
+class ShipmentListAPI(Resource):
+    def get(self):
+        """Get all shipments"""
+        try:
+            shipments = ShipmentService.get_all_shipments()
+            return shipments
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+    def post(self):
+        """Create a shipment"""
+        try:
+            data = request.get_json()
+            if not data:
+                return {'error': 'No data provided'}, 400
+            shipment = ShipmentService.create_shipment(data)
+            if not shipment:
+                return {'error': 'Order not found'}, 404
+            return shipment, 201
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+class ShipmentAPI(Resource):
+    def get(self, shipment_id):
+        """Get shipment by ID"""
+        try:
+            shipment = ShipmentService.get_shipment_by_id(shipment_id)
+            if not shipment:
+                return {'error': 'Shipment not found'}, 404
+            return shipment
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+class ShipmentStatusAPI(Resource):
+    def put(self, shipment_id):
+        """Update shipment status"""
+        try:
+            data = request.get_json()
+            if not data or 'status' not in data:
+                return {'error': 'No status provided'}, 400
+            shipment = ShipmentService.update_shipment_status(shipment_id, data['status'])
+            if not shipment:
+                return {'error': 'Shipment not found'}, 404
+            return shipment
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+class ShipmentSimulateAPI(Resource):
+    def post(self, shipment_id):
+        """Simulate shipment lifecycle asynchronously"""
+        try:
+            data = request.get_json() or {}
+            timeframes = data.get('timeframe_minutes')
+
+            def runner():
+                try:
+                    for _ in ShipmentService.simulate_shipment_lifecycle(shipment_id, timeframes):
+                        pass
+                except Exception as e:
+                    print(f"Shipment simulation error: {e}")
+
+            threading.Thread(target=runner, daemon=True).start()
+            return {'message': 'Simulation started'}, 202
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+class ShipmentsByOrderAPI(Resource):
+    def get(self, order_id):
+        """Get shipments for an order"""
+        try:
+            shipments = ShipmentService.get_shipments_by_order(order_id)
+            return shipments
+        except Exception as e:
+            return {'error': str(e)}, 500
+
 # Register API resources
 api.add_resource(MaterialListAPI, f'{API_PREFIX}/materials')
 api.add_resource(MaterialAPI, f'{API_PREFIX}/materials/<int:material_id>')
@@ -610,6 +693,11 @@ api.add_resource(MaterialAvailabilityAPI, f'{API_PREFIX}/orders/<int:order_id>/m
 api.add_resource(MaterialReservationAPI, f'{API_PREFIX}/orders/<int:order_id>/reserve-materials')
 api.add_resource(MaterialTransactionAPI, f'{API_PREFIX}/material-transactions')
 api.add_resource(MaterialTransactionByReferenceAPI, f'{API_PREFIX}/material-transactions/mes/<int:reference_id>')
+api.add_resource(ShipmentListAPI, "%s/shipments" % API_PREFIX)
+api.add_resource(ShipmentAPI, "%s/shipments/<int:shipment_id>" % API_PREFIX)
+api.add_resource(ShipmentStatusAPI, "%s/shipments/<int:shipment_id>/status" % API_PREFIX)
+api.add_resource(ShipmentSimulateAPI, "%s/shipments/<int:shipment_id>/simulate" % API_PREFIX)
+api.add_resource(ShipmentsByOrderAPI, "%s/orders/<int:order_id>/shipments" % API_PREFIX)
 
 # Root endpoint
 @app.route('/')
@@ -622,7 +710,8 @@ def index():
             f'{API_PREFIX}/products',
             f'{API_PREFIX}/orders',
             f'{API_PREFIX}/production-plans',
-             f'{API_PREFIX}/status'
+            f'{API_PREFIX}/shipments',
+            f'{API_PREFIX}/status'
         ]
     }
 

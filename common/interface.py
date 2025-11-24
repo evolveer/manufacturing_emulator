@@ -160,6 +160,11 @@ def order_workflow():
     """Order processing workflow page"""
     return render_template('order_workflow.html')
 
+@app.route('/shipping-workflow')
+def shipping_workflow():
+    """Shipping workflow page"""
+    return render_template('shipping_workflow.html')
+
 # API routes
 @app.route('/api/status')
 def api_status():
