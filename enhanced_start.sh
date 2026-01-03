@@ -23,6 +23,11 @@ echo "Starting PCS Service on port 5003..."
 nohup python3 pcs/main.py > logs/pcs.log 2>&1 & echo $! > logs/pcs.pid
 sleep 2
 
+# Start EchoTrace (audit trail) Service
+echo "Starting EchoTrace Service on port 5004..."
+nohup python3 echotrace/api.py > logs/echotrace.log 2>&1 & echo $! > logs/echotrace.pid
+sleep 2
+
 # Start Unified Interface
 echo "Starting Unified Interface on port 5000..."
 nohup python3 common/interface.py > logs/interface.log 2>&1 & echo $! > logs/interface.pid
@@ -46,6 +51,7 @@ check_service() {
 check_service 5001 "ERP"
 check_service 5002 "MES"
 check_service 5003 "PCS"
+check_service 5004 "EchoTrace"
 check_service 5000 "Interface"
 
 echo ""

@@ -8,6 +8,10 @@ from database import get_db_session, close_db_session
 from shipping_models import Shipment, ShipmentItem
 from models import Order, Product
 from services import ProductService
+from echotrace.integration import log_audit_trail
+
+AUDIT_USER_ID = 0
+AUDIT_USERNAME = "system"
 
 
 class ShipmentService:
@@ -89,6 +93,19 @@ class ShipmentService:
                     session.add(item)
             
             session.commit()
+            try:
+                log_audit_trail(
+                    user_id=AUDIT_USER_ID,
+                    username=AUDIT_USERNAME,
+                    action="CREATE",
+                    entity_type="Shipment",
+                    entity_id=shipment.id,
+                    source_system="ERP",
+                    entity_name=shipment.shipment_number,
+                    new_value=shipment.to_dict()
+                )
+            except Exception:
+                pass
             return shipment.to_dict()
         except SQLAlchemyError as e:
             session.rollback()
@@ -128,6 +145,19 @@ class ShipmentService:
                 shipment.delivered_date = now
             
             session.commit()
+            try:
+                log_audit_trail(
+                    user_id=AUDIT_USER_ID,
+                    username=AUDIT_USERNAME,
+                    action="UPDATE",
+                    entity_type="Shipment",
+                    entity_id=shipment.id,
+                    source_system="ERP",
+                    entity_name=shipment.shipment_number,
+                    changes={'old_status': old_status, 'new_status': new_status}
+                )
+            except Exception:
+                pass
             return shipment.to_dict()
         except SQLAlchemyError as e:
             session.rollback()

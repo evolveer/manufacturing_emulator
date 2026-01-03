@@ -10,8 +10,11 @@ from flask_restful import Resource
 from sqlalchemy.exc import SQLAlchemyError
 from database import get_db_session, close_db_session
 from models import WorkOrder, Machine, ProductionSchedule, QualityCheck, MaterialTracking, ProductionCount, Downtime,Material,ProductionPlan
+from echotrace.integration import log_audit_trail
 
 logger = logging.getLogger(__name__)
+AUDIT_USER_ID = 0
+AUDIT_USERNAME = "system"
 
 class WorkOrderService:
     """Service for work order management"""
@@ -67,6 +70,19 @@ class WorkOrderService:
             )
             session.add(work_order)
             session.commit()
+            try:
+                log_audit_trail(
+                    user_id=AUDIT_USER_ID,
+                    username=AUDIT_USERNAME,
+                    action="UPDATE",
+                    entity_type="WorkOrder",
+                    entity_id=work_order.id,
+                    source_system="MES",
+                    entity_name=work_order.work_order_number,
+                    changes={'status': status}
+                )
+            except Exception as audit_err:
+                logger.warning("Audit log failed for WO %s: %s", work_order.id, audit_err)
             return work_order.to_dict()
         except SQLAlchemyError as e:
             session.rollback()

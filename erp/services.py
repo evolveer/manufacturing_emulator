@@ -8,8 +8,11 @@ import uuid
 from sqlalchemy.exc import SQLAlchemyError
 from database import get_db_session, close_db_session
 from models import Material, Product, BOMItem, Order, OrderItem, ProductionPlan, MaterialTransaction
+from echotrace.integration import log_audit_trail
 
 logger = logging.getLogger(__name__)
+AUDIT_USER_ID = 0
+AUDIT_USERNAME = "system"
 
 class MaterialService:
     """Service for material management"""
@@ -126,6 +129,19 @@ class MaterialService:
                 "Material stock update: id=%s change=%s -> new_stock=%s txn_type=%s",
                 material_id, qty_change, material.stock_quantity, txn_type or transaction_type
             )
+            try:
+                log_audit_trail(
+                    user_id=AUDIT_USER_ID,
+                    username=AUDIT_USERNAME,
+                    action="UPDATE",
+                    entity_type="Material",
+                    entity_id=material.id,
+                    source_system="ERP",
+                    entity_name=material.code,
+                    changes={'stock_quantity': material.stock_quantity, 'delta': qty_change, 'transaction_type': txn_type or transaction_type}
+                )
+            except Exception as audit_err:
+                logger.warning("Audit log failed for material %s: %s", material.id, audit_err)
             
             # Check if stock is below minimum level
             is_below_min = material.stock_quantity < material.min_stock_level
@@ -471,6 +487,19 @@ class OrderService:
                     session.add(order_item)
             
             session.commit()
+            try:
+                log_audit_trail(
+                    user_id=AUDIT_USER_ID,
+                    username=AUDIT_USERNAME,
+                    action="CREATE",
+                    entity_type="Order",
+                    entity_id=order.id,
+                    source_system="ERP",
+                    entity_name=order.order_number,
+                    new_value=order.to_dict()
+                )
+            except Exception as audit_err:
+                logger.warning("Audit log failed for order create %s: %s", order.id, audit_err)
             return order.to_dict()
         except SQLAlchemyError as e:
             session.rollback()
@@ -603,6 +632,19 @@ class OrderService:
             
             order.status = status
             session.commit()
+            try:
+                log_audit_trail(
+                    user_id=AUDIT_USER_ID,
+                    username=AUDIT_USERNAME,
+                    action="UPDATE",
+                    entity_type="Order",
+                    entity_id=order.id,
+                    source_system="ERP",
+                    entity_name=order.order_number,
+                    changes={'status': status}
+                )
+            except Exception as audit_err:
+                logger.warning("Audit log failed for order status %s: %s", order.id, audit_err)
             return order.to_dict()
         except SQLAlchemyError as e:
             session.rollback()

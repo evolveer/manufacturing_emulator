@@ -24,6 +24,7 @@ stop_service() {
 
 # Stop all services
 stop_service "logs/interface.pid" "Unified Interface"
+stop_service "logs/echotrace.pid" "EchoTrace Service"
 stop_service "logs/pcs.pid" "PCS Service"
 stop_service "logs/mes.pid" "MES Service"
 stop_service "logs/erp.pid" "ERP Service"
