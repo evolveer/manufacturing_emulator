@@ -3,11 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 logs/*.log
-
+database/*
 # C extensions
 *.so
 *.pyc
-*,db
+*.db
+
++.pid
 
 *.log
 # Distribution / packaging
