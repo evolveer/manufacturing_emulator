@@ -199,28 +199,29 @@ def test_integration_hooks_do_not_raise_when_offline():
 
 
 def test_erp_client_offline():
-    """ERP client is_online() returns False when ERP is not running."""
+    """ERP client is_online() returns False when pointed at a non-existent port."""
     from pharma.app.integration.erp_client import ERPClient
-    erp = ERPClient()
+    # Port 19999 is guaranteed to be unused – simulates ERP being offline
+    erp = ERPClient(base_url="http://localhost:19999/api/v1")
     assert erp.is_online() is False
-    # get_products returns empty list, not an exception
+    # get_products must return an empty list, not raise an exception
     products = erp.get_products()
     assert isinstance(products, list)
 
 
 def test_mes_client_offline():
-    """MES client is_online() returns False when MES is not running."""
+    """MES client is_online() returns False when pointed at a non-existent port."""
     from pharma.app.integration.mes_client import MESClient
-    mes = MESClient()
+    mes = MESClient(base_url="http://localhost:19999/api/v1")
     assert mes.is_online() is False
     work_orders = mes.get_work_orders()
     assert isinstance(work_orders, list)
 
 
 def test_pcs_client_offline():
-    """PCS client is_online() returns False when PCS is not running."""
+    """PCS client is_online() returns False when pointed at a non-existent port."""
     from pharma.app.integration.pcs_client import PCSClient
-    pcs = PCSClient()
+    pcs = PCSClient(base_url="http://localhost:19999/api/v1")
     assert pcs.is_online() is False
     alarms = pcs.get_active_alarms()
     assert isinstance(alarms, list)

@@ -21,8 +21,8 @@ logger = logging.getLogger("pharma.integration.pcs")
 class PCSClient(BaseClient):
     """Adapter for the PCS emulator REST API (port 5003)."""
 
-    def __init__(self) -> None:
-        super().__init__(PCS_BASE_URL, "PCS")
+    def __init__(self, base_url: Optional[str] = None) -> None:
+        super().__init__(base_url or PCS_BASE_URL, "PCS")
 
     # ── Machines ─────────────────────────────────────────────────────────────
     def get_all_machines_status(self) -> List[Dict]:

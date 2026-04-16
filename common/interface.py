@@ -666,7 +666,7 @@ def run_app():
     """Run the Flask application"""
     host = config['interface']['host']
     port = config['interface']['port']
-    app.run(host=host, port=port, debug=True)
+    app.run(host=host, port=port, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
     run_app()

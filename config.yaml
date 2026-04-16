@@ -1,6 +1,6 @@
 erp:
   api_version: v1
-  database: sqlite:///database/erp.db
+  database: sqlite:////home/ubuntu/manufacturing_emulator/database/erp.db
   host: 0.0.0.0
   modules:
   - inventory
@@ -10,7 +10,7 @@ erp:
   port: 5001
 mes:
   api_version: v1
-  database: sqlite:///database/mes.db
+  database: sqlite:////home/ubuntu/manufacturing_emulator/database/mes.db
   erp_connection:
     poll_interval: 5
     url: http://localhost:5001/api/v1
@@ -23,7 +23,7 @@ mes:
   port: 5002
 pcs:
   api_version: v1
-  database: sqlite:///database/pcs.db
+  database: sqlite:////home/ubuntu/manufacturing_emulator/database/pcs.db
   host: 0.0.0.0
   machine:
     cycle_time: 30

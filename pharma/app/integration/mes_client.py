@@ -22,8 +22,8 @@ logger = logging.getLogger("pharma.integration.mes")
 class MESClient(BaseClient):
     """Adapter for the MES emulator REST API (port 5002)."""
 
-    def __init__(self) -> None:
-        super().__init__(MES_BASE_URL, "MES")
+    def __init__(self, base_url: Optional[str] = None) -> None:
+        super().__init__(base_url or MES_BASE_URL, "MES")
 
     # ── Work Orders ─────────────────────────────────────────────────────────
     def get_work_orders(self) -> List[Dict]:

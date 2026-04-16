@@ -22,8 +22,8 @@ logger = logging.getLogger("pharma.integration.erp")
 class ERPClient(BaseClient):
     """Adapter for the ERP emulator REST API (port 5001)."""
 
-    def __init__(self) -> None:
-        super().__init__(ERP_BASE_URL, "ERP")
+    def __init__(self, base_url: Optional[str] = None) -> None:
+        super().__init__(base_url or ERP_BASE_URL, "ERP")
 
     # ── Products ────────────────────────────────────────────────────────────
     def get_products(self) -> List[Dict]:
@@ -148,6 +148,10 @@ class ERPClient(BaseClient):
         if status == 200 and isinstance(data, list):
             return data
         return []
+
+    def get_all_orders(self) -> List[Dict]:
+        """Alias for get_orders() used by the dashboard ERP check panel."""
+        return self.get_orders()
 
     def get_order_by_number(self, order_number: str) -> Optional[Dict]:
         data, status = self._get(f"/orders/number/{order_number}")

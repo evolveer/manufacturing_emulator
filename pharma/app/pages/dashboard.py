@@ -1,14 +1,14 @@
 """
 Dashboard Page
 Provides an operational overview: batch status summary, deviation counts,
-disposition breakdown, recent audit events, and live integration health panel.
+disposition breakdown, recent audit events, live integration health panel,
+and an ERP Production Order creation check panel.
 """
 
 from __future__ import annotations
 
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
 from pharma.app.domain.enums import BatchStatus, DeviationSeverity, DeviationStatus, Disposition
@@ -67,9 +67,146 @@ def _render_pcs_strip() -> None:
         pass  # PCS offline – silent
 
 
+def _render_erp_production_order_check() -> None:
+    """
+    ERP Production Order Creation Check Panel.
+
+    For every pharma order that has been dispatched to MES, this panel
+    verifies that a corresponding ERP production order was successfully
+    created and shows its current status.  If an order is missing from ERP
+    it is flagged in red so the operator can investigate or re-trigger the
+    integration hook.
+    """
+    st.subheader("ERP Production Order Check")
+    st.caption(
+        "Verifies that every pharma order dispatched to MES has a matching "
+        "production order in ERP.  Missing or mismatched orders are highlighted."
+    )
+
+    pharma_orders = get_all_orders()
+    dispatched = [
+        o for o in pharma_orders
+        if o.status.value not in ("Created",)
+    ]
+
+    if not dispatched:
+        st.info("No orders have been dispatched to MES yet.")
+        return
+
+    # Fetch ERP orders (best-effort)
+    erp_orders_by_number: dict = {}
+    erp_online = False
+    try:
+        from pharma.app.integration.erp_client import ERPClient
+        erp = ERPClient()
+        if erp.is_online():
+            erp_online = True
+            raw = erp.get_all_orders()
+            for o in (raw or []):
+                num = o.get("order_number", "")
+                if num:
+                    erp_orders_by_number[num] = o
+    except Exception:
+        pass
+
+    if not erp_online:
+        st.warning(
+            "ERP is offline — cannot verify production order status. "
+            "Showing pharma-side order data only."
+        )
+
+    rows = []
+    for po in dispatched:
+        erp_match = erp_orders_by_number.get(po.order_id)
+        if erp_online:
+            if erp_match:
+                erp_status = erp_match.get("status", "unknown")
+                erp_id = str(erp_match.get("id", "—"))
+                sync_status = "✅ Matched"
+            else:
+                erp_status = "NOT FOUND"
+                erp_id = "—"
+                sync_status = "❌ Missing in ERP"
+        else:
+            erp_status = "—"
+            erp_id = "—"
+            sync_status = "⚠️ ERP Offline"
+
+        rows.append({
+            "Pharma Order ID": po.order_id,
+            "Product": po.product_name,
+            "Qty": f"{po.quantity:,.0f} {po.unit}",
+            "Pharma Status": po.status.value,
+            "ERP Order ID": erp_id,
+            "ERP Status": erp_status,
+            "ERP Sync": sync_status,
+            "Due Date": po.due_date,
+        })
+
+    df = pd.DataFrame(rows)
+
+    # Colour-code the ERP Sync column
+    def _highlight_sync(val: str) -> str:
+        if "Missing" in val:
+            return "background-color: #fde8e8; color: #c0392b; font-weight: bold"
+        if "Offline" in val:
+            return "background-color: #fef9e7; color: #d35400"
+        return "background-color: #eafaf1; color: #1e8449"
+
+    styled = df.style.applymap(_highlight_sync, subset=["ERP Sync"])
+    st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    # Summary metrics
+    if erp_online:
+        matched = sum(1 for r in rows if "Matched" in r["ERP Sync"])
+        missing = sum(1 for r in rows if "Missing" in r["ERP Sync"])
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("Orders Dispatched", len(rows))
+        mc2.metric("ERP Matched", matched)
+        mc3.metric("Missing in ERP", missing,
+                   delta=f"{missing} need attention" if missing else "All good",
+                   delta_color="inverse" if missing else "normal")
+
+    # Re-trigger button for missing orders
+    if erp_online:
+        missing_orders = [po for po in dispatched
+                          if po.order_id not in erp_orders_by_number]
+        if missing_orders:
+            st.markdown("---")
+            st.warning(
+                f"**{len(missing_orders)} order(s) are missing from ERP.** "
+                "Use the button below to re-trigger the ERP integration hook."
+            )
+            if st.button("🔄 Re-trigger ERP Sync for Missing Orders",
+                         type="primary"):
+                from pharma.app.integration import orchestrator as orch
+                re_synced = 0
+                for po in missing_orders:
+                    try:
+                        orch.on_order_created(
+                            pharma_order_id=po.order_id,
+                            product_code=po.product_code,
+                            product_name=po.product_name,
+                            quantity=po.quantity,
+                            due_date=po.due_date,
+                            site=po.site,
+                        )
+                        re_synced += 1
+                    except Exception as exc:
+                        st.error(f"Failed to re-sync {po.order_id}: {exc}")
+                if re_synced:
+                    st.success(
+                        f"Re-triggered ERP sync for {re_synced} order(s). "
+                        "Refresh the page to see updated status."
+                    )
+
+
 def render() -> None:
     st.title("📊 Operations Dashboard")
-    st.caption("Real-time overview of batch execution status, deviations, and system integration.")
+    st.caption(
+        "Real-time overview of batch execution status, deviations, "
+        "system integration, and ERP production order verification."
+    )
     st.markdown("---")
 
     # ── Integration health ────────────────────────────────────────────────
@@ -103,7 +240,12 @@ def render() -> None:
     # ── PCS sensor strip ──────────────────────────────────────────────────
     _render_pcs_strip()
 
+    # ── ERP Production Order Check ────────────────────────────────────────
+    st.markdown("---")
+    _render_erp_production_order_check()
+
     # ── Charts row ────────────────────────────────────────────────────────────
+    st.markdown("---")
     chart_col1, chart_col2, chart_col3 = st.columns(3)
 
     with chart_col1:

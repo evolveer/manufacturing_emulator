@@ -29,4 +29,4 @@ if __name__ == '__main__':
     os.makedirs(static_dir, exist_ok=True)
     
     # Run the app
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
