@@ -725,7 +725,8 @@ def run_app():
     """Run the Flask application"""
     host = config['erp']['host']
     port = config['erp']['port']
-    app.run(host=host, port=port, debug=False, use_reloader=False)
+    debug = _env_flag("ERP_DEBUG", default=False)
+    app.run(host=host, port=port, debug=debug, use_reloader=debug)
 
 if __name__ == '__main__':
     run_app()

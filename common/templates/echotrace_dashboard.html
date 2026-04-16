@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoTrace - Audit Trail Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo {
+            font-size: 1.2em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+        }
+
+        .nav-links a {
+            padding: 10px 20px;
+            background: #f0f0f0;
+            color: #333;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .search-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .search-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        input[type="datetime-local"],
+        select {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .stats-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .results-section {
+            margin-top: 30px;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .results-title {
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        .results-count {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .badge-create { background: #28a745; color: white; }
+        .badge-update { background: #ffc107; color: #333; }
+        .badge-delete { background: #dc3545; color: white; }
+        .badge-approve { background: #17a2b8; color: white; }
+        .badge-reject { background: #6c757d; color: white; }
+        .badge-default { background: #e9ecef; color: #333; }
+
+        .details-btn {
+            padding: 5px 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+
+        .details-btn:hover {
+            background: #764ba2;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            color: #667eea;
+        }
+
+        .close-btn {
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .detail-row {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .json-viewer {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 1.1em;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .page-btn {
+            padding: 8px 15px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span class="logo">🔍</span>
+                EchoTrace
+                <span style="font-size: 0.5em; color: #999;">Audit Trail System</span>
+            </h1>
+            <div class="nav-links">
+                <a href="/">🏠 Home</a>
+                <a href="/erp">📊 ERP</a>
+                <a href="/mes">⚙️ MES</a>
+                <a href="/pcs">🏭 PCS</a>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div class="stats-section" id="statsSection">
+            <div class="stat-card">
+                <div class="stat-label">Total Records</div>
+                <div class="stat-value" id="totalRecords">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Today's Activity</div>
+                <div class="stat-value" id="todayActivity">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Users</div>
+                <div class="stat-value" id="activeUsers">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Systems</div>
+                <div class="stat-value" id="systemCount">-</div>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="search-section">
+            <div class="search-title">🔎 Advanced Search</div>
+            
+            <div class="search-grid">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="searchUsername" placeholder="Enter username">
+                </div>
+                
+                <div class="form-group">
+                    <label>Action</label>
+                    <select id="searchAction">
+                        <option value="">All Actions</option>
+                        <option value="CREATE">CREATE</option>
+                        <option value="UPDATE">UPDATE</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="APPROVE">APPROVE</option>
+                        <option value="REJECT">REJECT</option>
+                        <option value="SIGN">SIGN</option>
+                        <option value="SHIP">SHIP</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Entity Type</label>
+                    <select id="searchEntityType">
+                        <option value="">All Entities</option>
+                        <option value="Order">Order</option>
+                        <option value="Material">Material</option>
+                        <option value="Product">Product</option>
+                        <option value="Batch">Batch</option>
+                        <option value="WorkOrder">Work Order</option>
+                        <option value="Equipment">Equipment</option>
+                        <option value="Alarm">Alarm</option>
+                        <option value="Shipment">Shipment</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Source System</label>
+                    <select id="searchSourceSystem">
+                        <option value="">All Systems</option>
+                        <option value="ERP">ERP</option>
+                        <option value="MES">MES</option>
+                        <option value="PCS">PCS</option>
+                        <option value="EchoTrace">EchoTrace</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Entity ID</label>
+                    <input type="text" id="searchEntityId" placeholder="Enter entity ID">
+                </div>
+                
+                <div class="form-group">
+                    <label>Batch Number</label>
+                    <input type="text" id="searchBatchNumber" placeholder="Enter batch number">
+                </div>
+                
+                <div class="form-group">
+                    <label>Order Number</label>
+                    <input type="text" id="searchOrderNumber" placeholder="Enter order number">
+                </div>
+                
+                <div class="form-group">
+                    <label>Search Text</label>
+                    <input type="text" id="searchText" placeholder="Search across all fields">
+                </div>
+                
+                <div class="form-group">
+                    <label>Start Date</label>
+                    <input type="datetime-local" id="searchStartDate">
+                </div>
+                
+                <div class="form-group">
+                    <label>End Date</label>
+                    <input type="datetime-local" id="searchEndDate">
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-primary" onclick="searchAuditTrail()">🔍 Search</button>
+                <button class="btn-secondary" onclick="clearSearch()">🔄 Clear</button>
+                <button class="btn-success" onclick="loadStatistics()">📊 Refresh Stats</button>
+                <button class="btn-info" onclick="exportResults()">📥 Export CSV</button>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section">
+            <div class="results-header">
+                <div class="results-title">📋 Audit Trail Records</div>
+                <div class="results-count" id="resultsCount">0 records found</div>
+            </div>
+            
+            <div id="resultsContainer">
+                <div class="loading">Loading audit trail data...</div>
+            </div>
+            
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div class="modal" id="detailsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Audit Trail Details</div>
+                <span class="close-btn" onclick="closeModal()">&times;</span>
+            </div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5004/api/v1';
+        let currentPage = 0;
+        const pageSize = 50;
+        let currentResults = [];
+
+        // Load statistics on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadStatistics();
+            searchAuditTrail();
+        });
+
+        async function loadStatistics() {
+            try {
+                const response = await fetch(`${API_BASE}/audit-trail/statistics`);
+                const data = await response.json();
+                
+                document.getElementById('totalRecords').textContent = data.total_records || 0;
+                document.getElementById('activeUsers').textContent = data.top_users?.length || 0;
+                document.getElementById('systemCount').textContent = Object.keys(data.by_source_system || {}).length;
+                
+                // Calculate today's activity
+                const today = new Date().toISOString().split('T')[0];
+                const todayResponse = await fetch(`${API_BASE}/audit-trail/search?start_date=${today}&limit=1000`);
+                const todayData = await todayResponse.json();
+                document.getElementById('todayActivity').textContent = todayData.total_count || 0;
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        async function searchAuditTrail() {
+            const params = new URLSearchParams();
+            
+            const username = document.getElementById('searchUsername').value;
+            const action = document.getElementById('searchAction').value;
+            const entityType = document.getElementById('searchEntityType').value;
+            const sourceSystem = document.getElementById('searchSourceSystem').value;
+            const entityId = document.getElementById('searchEntityId').value;
+            const batchNumber = document.getElementById('searchBatchNumber').value;
+            const orderNumber = document.getElementById('searchOrderNumber').value;
+            const searchText = document.getElementById('searchText').value;
+            const startDate = document.getElementById('searchStartDate').value;
+            const endDate = document.getElementById('searchEndDate').value;
+            
+            if (username) params.append('username', username);
+            if (action) params.append('action', action);
+            if (entityType) params.append('entity_type', entityType);
+            if (sourceSystem) params.append('source_system', sourceSystem);
+            if (entityId) params.append('entity_id', entityId);
+            if (batchNumber) params.append('batch_number', batchNumber);
+            if (orderNumber) params.append('order_number', orderNumber);
+            if (searchText) params.append('search_text', searchText);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+            
+            params.append('limit', pageSize);
+            params.append('offset', currentPage * pageSize);
+            params.append('order_by', 'timestamp');
+            params.append('order_direction', 'desc');
+            
+            try {
+                document.getElementById('resultsContainer').innerHTML = '<div class="loading">Searching...</div>';
+                
+                const response = await fetch(`${API_BASE}/audit-trail/search?${params}`);
+                const data = await response.json();
+                
+                currentResults = data.records;
+                displayResults(data);
+            } catch (error) {
+                console.error('Error searching audit trail:', error);
+                document.getElementById('resultsContainer').innerHTML = '<div class="no-results">Error loading results</div>';
+            }
+        }
+
+        function displayResults(data) {
+            const container = document.getElementById('resultsContainer');
+            document.getElementById('resultsCount').textContent = `${data.total_count} records found`;
+            
+            if (data.records.length === 0) {
+                container.innerHTML = '<div class="no-results">No audit trail records found</div>';
+                return;
+            }
+            
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Entity</th>
+                            <th>System</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            data.records.forEach(record => {
+                const timestamp = new Date(record.timestamp).toLocaleString();
+                const actionBadge = getActionBadge(record.action);
+                
+                html += `
+                    <tr>
+                        <td>${timestamp}</td>
+                        <td>${record.username}</td>
+                        <td>${actionBadge}</td>
+                        <td>
+                            <strong>${record.entity_type}</strong><br>
+                            <small>${record.entity_id}</small>
+                        </td>
+                        <td>${record.source_system}</td>
+                        <td>
+                            <button class="details-btn" onclick="showDetails(${record.id})">View</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            container.innerHTML = html;
+            
+            // Update pagination
+            updatePagination(data.total_count);
+        }
+
+        function getActionBadge(action) {
+            const classes = {
+                'CREATE': 'badge-create',
+                'UPDATE': 'badge-update',
+                'DELETE': 'badge-delete',
+                'APPROVE': 'badge-approve',
+                'REJECT': 'badge-reject'
+            };
+            
+            const className = classes[action] || 'badge-default';
+            return `<span class="badge ${className}">${action}</span>`;
+        }
+
+        async function showDetails(auditId) {
+            const record = currentResults.find(r => r.id === auditId);
+            if (!record) return;
+            
+            let html = '';
+            
+            const fields = [
+                { label: 'Audit ID', value: record.id },
+                { label: 'Timestamp', value: new Date(record.timestamp).toLocaleString() },
+                { label: 'User ID', value: record.user_id },
+                { label: 'Username', value: record.username },
+                { label: 'User Role', value: record.user_role || 'N/A' },
+                { label: 'Action', value: record.action },
+                { label: 'Entity Type', value: record.entity_type },
+                { label: 'Entity ID', value: record.entity_id },
+                { label: 'Entity Name', value: record.entity_name || 'N/A' },
+                { label: 'Source System', value: record.source_system },
+                { label: 'Source IP', value: record.source_ip || 'N/A' },
+                { label: 'Session ID', value: record.session_id || 'N/A' },
+                { label: 'Batch Number', value: record.batch_number || 'N/A' },
+                { label: 'Order Number', value: record.order_number || 'N/A' },
+                { label: 'Reason', value: record.reason || 'N/A' }
+            ];
+            
+            fields.forEach(field => {
+                html += `
+                    <div class="detail-row">
+                        <div class="detail-label">${field.label}:</div>
+                        <div class="detail-value">${field.value}</div>
+                    </div>
+                `;
+            });
+            
+            if (record.old_value) {
+                html += `
+                    <div class="detail-row">
+                        <div class="detail-label">Old Value:</div>
+                        <div class="detail-value">
+                            <div class="json-viewer">${JSON.stringify(record.old_value, null, 2)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (record.new_value) {
+                html += `
+                    <div class="detail-row">
+                        <div class="detail-label">New Value:</div>
+                        <div class="detail-value">
+                            <div class="json-viewer">${JSON.stringify(record.new_value, null, 2)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (record.changes) {
+                html += `
+                    <div class="detail-row">
+                        <div class="detail-label">Changes:</div>
+                        <div class="detail-value">
+                            <div class="json-viewer">${JSON.stringify(record.changes, null, 2)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div class="detail-row">
+                    <div class="detail-label">Record Hash:</div>
+                    <div class="detail-value" style="font-family: monospace; font-size: 0.8em;">${record.record_hash}</div>
+                </div>
+            `;
+            
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('detailsModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('detailsModal').style.display = 'none';
+        }
+
+        function clearSearch() {
+            document.getElementById('searchUsername').value = '';
+            document.getElementById('searchAction').value = '';
+            document.getElementById('searchEntityType').value = '';
+            document.getElementById('searchSourceSystem').value = '';
+            document.getElementById('searchEntityId').value = '';
+            document.getElementById('searchBatchNumber').value = '';
+            document.getElementById('searchOrderNumber').value = '';
+            document.getElementById('searchText').value = '';
+            document.getElementById('searchStartDate').value = '';
+            document.getElementById('searchEndDate').value = '';
+            currentPage = 0;
+            searchAuditTrail();
+        }
+
+        function updatePagination(totalCount) {
+            const totalPages = Math.ceil(totalCount / pageSize);
+            const pagination = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+            
+            let html = '';
+            
+            if (currentPage > 0) {
+                html += `<button class="page-btn" onclick="changePage(${currentPage - 1})">← Previous</button>`;
+            }
+            
+            for (let i = 0; i < Math.min(totalPages, 10); i++) {
+                const active = i === currentPage ? 'active' : '';
+                html += `<button class="page-btn ${active}" onclick="changePage(${i})">${i + 1}</button>`;
+            }
+            
+            if (currentPage < totalPages - 1) {
+                html += `<button class="page-btn" onclick="changePage(${currentPage + 1})">Next →</button>`;
+            }
+            
+            pagination.innerHTML = html;
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            searchAuditTrail();
+        }
+
+        function exportResults() {
+            if (currentResults.length === 0) {
+                alert('No results to export');
+                return;
+            }
+            
+            const headers = ['ID', 'Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Source System', 'Reason'];
+            const rows = currentResults.map(r => [
+                r.id,
+                r.timestamp,
+                r.username,
+                r.action,
+                r.entity_type,
+                r.entity_id,
+                r.source_system,
+                r.reason || ''
+            ]);
+            
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.map(cell => `"${cell}"`).join(',') + '\n';
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `audit_trail_${new Date().toISOString()}.csv`;
+            a.click();
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('detailsModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>

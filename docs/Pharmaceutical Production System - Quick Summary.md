@@ -54,6 +54,11 @@
 - No high availability
 - No separate environments (dev/QA/validation/prod)
 
+**Data Synchronization & Audit Trails**
+- No centralized audit trail replication across ERP/MES/PCS
+- No immutable, append-only audit log shipping to secondary storage
+- No reconciliation jobs to prove audit completeness after data sync
+
 ### Recommended Path Forward
 
 **Option 1: Commercial Off-the-Shelf (COTS) - RECOMMENDED**

@@ -9,3 +9,6 @@ erp/services.py, erp/shipping_services.py, and mes/services.py use:
 This package provides a drop-in implementation that writes records to a
 shared SQLite database at <repo_root>/echotrace/audit.db.
 """
+
+__version__ = "1.0.0"
+__author__ = "Manufacturing Emulator Team"

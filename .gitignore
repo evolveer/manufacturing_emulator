@@ -8,8 +8,11 @@ database/*
 *.so
 *.pyc
 *.db
+logs/*
+*.pid
 
-+.pid
+.codex
+
 
 *.log
 # Distribution / packaging
