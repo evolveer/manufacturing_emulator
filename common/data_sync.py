@@ -228,6 +228,15 @@ class DataSynchronizer:
                     logger.warning(f"⚠️ Skipping plan without ID: {plan}")
                     continue
 
+                # Skip pharma-managed plans – the pharma Streamlit app controls their
+                # work order lifecycle directly via its own integration layer.
+                # Pharma plans are identified by the 'PP-ORD-' or 'PP-BAT-' prefixes
+                # set by pharma/app/integration/erp_client.py.
+                plan_number = plan.get('plan_number', '')
+                if plan_number.startswith('PP-ORD-') or plan_number.startswith('PP-BAT-'):
+                    logger.info(f"⏭️ Skipping pharma-managed plan {plan_number} (id={plan['id']})")
+                    continue
+
                 logger.info(f"🔄 Syncing production plan {plan['id']}...")
 
                 # 1. Check if plan exists in MES
@@ -794,18 +803,25 @@ class DataSynchronizer:
                     existing_checks = response.json()
                     
                     if not existing_checks:
-                        # Create quality check
+                        # Map PCS alarm severity to MES quality check status.
+                        # PCS severities: 'info', 'warning', 'error', 'critical'.
+                        # MES QualityCheck.status accepts: 'pass', 'fail', 'warning'.
+                        alarm_severity = alarm.get('severity', 'info')
+                        if alarm_severity in ('error', 'critical', 'high'):
+                            qc_status = 'fail'
+                        elif alarm_severity == 'warning':
+                            qc_status = 'warning'
+                        else:
+                            qc_status = 'pass'
+                        # Create quality check using only fields the MES model supports
                         response = requests.post(
                             f"{self.mes_url}/quality-checks",
                             json={
                                 'work_order_id': work_order_id,
-                                'check_type': 'alarm',
-                                'parameter': alarm['alarm_code'],
-                                'value': 0,
-                                'result': 'fail' if alarm['severity'] in ['error', 'critical'] else 'warning',
-                                'notes': alarm['description'],
-                                'reference_id': str(alarm['id']),
-                                'reference_type': 'pcs_alarm'
+                                'parameter': alarm.get('alarm_code', 'ALARM'),
+                                'value': 0.0,
+                                'status': qc_status,
+                                'notes': f"[PCS Alarm id={alarm['id']}] {alarm.get('description', '')}",
                             }
                         )
                         

@@ -106,15 +106,15 @@ class MESClient(BaseClient):
             logger.warning("MES work order not found for quality check: %s", work_order_number)
             return None
         wo_id = wo["id"]
+        # MES QualityCheck model uses 'parameter' and 'value' (not parameter_name/actual_value/result)
         payload = {
             "work_order_id": wo_id,
-            "check_type": check_type,
-            "parameter_name": parameter_name,
-            "actual_value": actual_value,
+            "parameter": parameter_name,
+            "value": float(actual_value) if actual_value is not None else 0.0,
             "min_value": min_value,
             "max_value": max_value,
-            "result": "pass" if passed else "fail",
-            "notes": notes,
+            "status": "pass" if passed else "fail",
+            "notes": f"[{check_type}] {notes}" if check_type else notes,
         }
         data, status = self._post("/quality-checks", payload)
         if status in (200, 201) and data:

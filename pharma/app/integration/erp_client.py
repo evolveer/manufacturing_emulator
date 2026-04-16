@@ -61,17 +61,25 @@ class ERPClient(BaseClient):
         return None
 
     def update_product_stock(self, product_code: str, quantity_delta: float) -> bool:
-        """Increment (positive) or decrement (negative) ERP product stock."""
+        """Increment (positive) or decrement (negative) ERP product stock.
+
+        Uses the dedicated /products/{id}/stock endpoint which expects
+        ``quantity_change`` (a signed delta) and ``transaction_type``.
+        """
         product = self.get_product_by_code(product_code)
         if not product:
             logger.warning("ERP product not found for stock update: %s", product_code)
             return False
         product_id = product["id"]
-        new_qty = max(0.0, product.get("stock_quantity", 0.0) + quantity_delta)
-        data, status = self._put(f"/products/{product_id}", {"stock_quantity": new_qty})
+        payload = {
+            "quantity_change": float(quantity_delta),
+            "transaction_type": "production",
+        }
+        data, status = self._put(f"/products/{product_id}/stock", payload)
         if status == 200:
-            logger.info("ERP product stock updated: %s → %.2f", product_code, new_qty)
+            logger.info("ERP product stock updated: %s delta=%.2f", product_code, quantity_delta)
             return True
+        logger.warning("ERP product stock update failed: %s status=%d", product_code, status)
         return False
 
     # ── Materials ───────────────────────────────────────────────────────────
@@ -168,7 +176,9 @@ class ERPClient(BaseClient):
 
         payload = {
             "order_number": pharma_order_id,
-            "status": "planned",
+            # ERP Order.status valid values: 'draft','confirmed','in_production','completed','cancelled'
+            "status": "confirmed",
+            "customer_name": f"Pharma – {site}",
             "notes": f"Pharma batch order – site: {site}",
             "items": [
                 {

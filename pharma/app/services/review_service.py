@@ -125,12 +125,14 @@ def submit_review(
                 batch_id=batch_id,
                 product_code=batch.product_code,
                 quantity=batch.quantity,
+                pharma_order_id=batch.order_id,
             )
         elif disposition == Disposition.REJECT_HOLD:
             _fire_integration(
                 "on_batch_rejected",
                 batch_id=batch_id,
                 reason=comment or "Rejected by QA reviewer",
+                pharma_order_id=batch.order_id,
             )
 
     return decision

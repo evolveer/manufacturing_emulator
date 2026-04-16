@@ -77,8 +77,8 @@ def on_order_created(
 
 # ── Order Sent to MES ──────────────────────────────────────────────────────
 def on_order_sent_to_mes(pharma_order_id: str) -> Dict[str, Any]:
-    """Update ERP order status to 'in_progress'."""
-    ok = _erp.update_order_status(pharma_order_id, "in_progress")
+    """Update ERP order status to 'in_production' (ERP canonical value)."""
+    ok = _erp.update_order_status(pharma_order_id, "in_production")
     return {"erp_status_updated": ok}
 
 
@@ -257,30 +257,52 @@ def on_batch_completed(batch_id: str, product_code: str, quantity: float) -> Dic
 
 
 # ── Batch Released ─────────────────────────────────────────────────────────
-def on_batch_released(batch_id: str, product_code: str, quantity: float) -> Dict[str, Any]:
+def on_batch_released(
+    batch_id: str,
+    product_code: str,
+    quantity: float,
+    pharma_order_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     When a batch is released (QA approved):
     - Update ERP product stock (add released quantity).
     - Update ERP order status to 'completed'.
+    The ERP order was created with the pharma *order_id* as its order_number,
+    not the batch_id, so we must look it up by order_id when available.
     """
     results: Dict[str, Any] = {}
 
     ok_stock = _erp.update_product_stock(product_code, quantity)
     results["erp_stock_updated"] = ok_stock
 
-    ok_order = _erp.update_order_status(batch_id, "completed")
+    # Prefer the pharma order_id for ERP lookup; fall back to batch_id
+    erp_order_number = pharma_order_id or batch_id
+    ok_order = _erp.update_order_status(erp_order_number, "completed")
     results["erp_order_completed"] = ok_order
 
-    logger.info("on_batch_released: %s product=%s qty=%.2f", batch_id, product_code, quantity)
+    logger.info(
+        "on_batch_released: batch=%s order=%s product=%s qty=%.2f",
+        batch_id, erp_order_number, product_code, quantity,
+    )
     return results
 
 
 # ── Batch Rejected ─────────────────────────────────────────────────────────
-def on_batch_rejected(batch_id: str, reason: str) -> Dict[str, Any]:
-    """Update MES work order to on_hold and ERP order to cancelled."""
-    ok_mes = _mes.update_work_order_status(batch_id, "on_hold")
-    ok_erp = _erp.update_order_status(batch_id, "cancelled")
-    return {"mes_on_hold": ok_mes, "erp_cancelled": ok_erp}
+def on_batch_rejected(
+    batch_id: str,
+    reason: str,
+    pharma_order_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update MES work order to 'cancelled' and ERP order to 'cancelled'.
+
+    Note: MES valid statuses are planned/scheduled/in_progress/completed/cancelled.
+    'on_hold' is not a valid MES status; 'cancelled' is the correct terminal state.
+    """
+    ok_mes = _mes.update_work_order_status(batch_id, "cancelled")
+    erp_order_number = pharma_order_id or batch_id
+    ok_erp = _erp.update_order_status(erp_order_number, "cancelled")
+    logger.info("on_batch_rejected: batch=%s order=%s reason=%s", batch_id, erp_order_number, reason)
+    return {"mes_cancelled": ok_mes, "erp_cancelled": ok_erp}
 
 
 # ── Live Data Pulls ────────────────────────────────────────────────────────

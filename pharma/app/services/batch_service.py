@@ -161,12 +161,14 @@ def set_batch_status(batch_id: str, status: BatchStatus, user: str = "system") -
             batch_id=batch_id,
             product_code=batch.product_code,
             quantity=batch.quantity,
+            pharma_order_id=batch.order_id,
         )
     elif status in (BatchStatus.REJECTED, BatchStatus.ON_HOLD):
         _fire_integration(
             "on_batch_rejected",
             batch_id=batch_id,
             reason=f"Batch status set to {status.value}",
+            pharma_order_id=batch.order_id,
         )
 
     return batch

@@ -74,12 +74,12 @@ class WorkOrderService:
                 log_audit_trail(
                     user_id=AUDIT_USER_ID,
                     username=AUDIT_USERNAME,
-                    action="UPDATE",
+                    action="CREATE",
                     entity_type="WorkOrder",
                     entity_id=work_order.id,
                     source_system="MES",
                     entity_name=work_order.work_order_number,
-                    changes={'status': status}
+                    new_value={'status': work_order.status}
                 )
             except Exception as audit_err:
                 logger.warning("Audit log failed for WO %s: %s", work_order.id, audit_err)
