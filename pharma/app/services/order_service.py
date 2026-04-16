@@ -1,10 +1,12 @@
 """
 Order Service
 Manages production order lifecycle: creation, status transitions, and retrieval.
+Integration hooks fire ERP calls at each lifecycle event.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from ..domain.enums import OrderStatus
@@ -12,7 +14,18 @@ from ..domain.models import ProductionOrder
 from ..utils.persistence import get_by_id, load_all, upsert
 from . import audit_service
 
+logger = logging.getLogger("pharma.services.order")
+
 ENTITY = "orders"
+
+
+def _fire_integration(fn_name: str, *args, **kwargs) -> None:
+    """Call an integration orchestrator function, swallowing all errors."""
+    try:
+        from ..integration import orchestrator as orch
+        getattr(orch, fn_name)(*args, **kwargs)
+    except Exception as exc:
+        logger.warning("Integration hook %s failed (non-fatal): %s", fn_name, exc)
 
 
 def create_order(
@@ -38,12 +51,24 @@ def create_order(
     upsert(ENTITY, ProductionOrder, order, "order_id")
     audit_service.log_event(
         user=created_by,
-        action="batch created",
+        action="order created",
         entity_type="ProductionOrder",
         entity_id=order.order_id,
         new_value=OrderStatus.CREATED.value,
         comment=f"Order for {product_name} ({product_code}), qty {quantity} {unit}",
     )
+
+    # ── Integration: notify ERP ────────────────────────────────────────────
+    _fire_integration(
+        "on_order_created",
+        pharma_order_id=order.order_id,
+        product_code=product_code,
+        product_name=product_name,
+        quantity=quantity,
+        due_date=due_date,
+        site=site,
+    )
+
     return order
 
 
@@ -56,12 +81,16 @@ def send_to_mes(order_id: str, user: str = "planner") -> Optional[ProductionOrde
     upsert(ENTITY, ProductionOrder, order, "order_id")
     audit_service.log_event(
         user=user,
-        action="disposition changed",
+        action="order sent to MES",
         entity_type="ProductionOrder",
         entity_id=order_id,
         old_value=old,
         new_value=order.status.value,
     )
+
+    # ── Integration: update ERP order status ──────────────────────────────
+    _fire_integration("on_order_sent_to_mes", pharma_order_id=order_id)
+
     return order
 
 
@@ -75,7 +104,7 @@ def mark_in_execution(order_id: str, batch_id: str, user: str = "system") -> Opt
     upsert(ENTITY, ProductionOrder, order, "order_id")
     audit_service.log_event(
         user=user,
-        action="disposition changed",
+        action="order in execution",
         entity_type="ProductionOrder",
         entity_id=order_id,
         old_value=old,
@@ -94,7 +123,7 @@ def complete_order(order_id: str, user: str = "system") -> Optional[ProductionOr
     upsert(ENTITY, ProductionOrder, order, "order_id")
     audit_service.log_event(
         user=user,
-        action="disposition changed",
+        action="order completed",
         entity_type="ProductionOrder",
         entity_id=order_id,
         old_value=old,

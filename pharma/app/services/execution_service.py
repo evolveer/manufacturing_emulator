@@ -2,10 +2,12 @@
 Execution Service
 Manages step-by-step batch execution: starting steps, capturing parameters,
 completing steps, and triggering deviations on out-of-spec values.
+Integration hooks fire MES quality checks and PCS sensor reads at each event.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, List, Optional, Tuple
 
 from ..domain.enums import BatchStatus, DeviationCategory, DeviationSeverity, StepStatus
@@ -24,7 +26,18 @@ from .batch_service import (
 from .deviation_service import open_deviation
 from .recipe_service import get_recipe
 
+logger = logging.getLogger("pharma.services.execution")
+
 PARAM_ENTITY = "parameters"
+
+
+def _fire_integration(fn_name: str, *args, **kwargs) -> None:
+    """Call an integration orchestrator function, swallowing all errors."""
+    try:
+        from ..integration import orchestrator as orch
+        getattr(orch, fn_name)(*args, **kwargs)
+    except Exception as exc:
+        logger.warning("Integration hook %s failed (non-fatal): %s", fn_name, exc)
 
 
 def get_execution_for_step(batch_id: str, step_id: str) -> Optional[StepExecution]:
@@ -60,6 +73,15 @@ def start_step(batch_id: str, step_id: str, operator: str) -> Optional[StepExecu
         new_value=StepStatus.IN_PROGRESS.value,
         comment=f"Batch {batch_id}, Step {step_id}",
     )
+
+    # ── Integration: notify MES that work order is in_progress ────────────
+    _fire_integration(
+        "on_step_started",
+        batch_id=batch_id,
+        step_name=exe.step_name,
+        operator=operator,
+    )
+
     return exe
 
 
@@ -88,6 +110,7 @@ def capture_parameters(
     for name, raw_value in param_values.items():
         spec = param_specs.get(name)
         within_spec = True
+        msg = ""
         if spec:
             within_spec, msg, typed_value = validate_parameter(spec, raw_value)
         else:
@@ -108,11 +131,24 @@ def capture_parameters(
 
         audit_service.log_event(
             user=operator,
-            action="parameter changed",
+            action="parameter captured",
             entity_type="ParameterRecord",
             entity_id=rec.parameter_id,
             new_value=f"{name}={raw_value}",
             comment=f"Batch {batch_id}, Step {step_id}, within_spec={within_spec}",
+        )
+
+        # ── Integration: push quality check to MES ─────────────────────────
+        _fire_integration(
+            "on_parameter_captured",
+            batch_id=batch_id,
+            step_name=step_spec.name if step_spec else step_id,
+            parameter_name=name,
+            value=typed_value,
+            unit=spec.unit if spec else "",
+            within_spec=within_spec,
+            min_value=spec.min_value if spec else None,
+            max_value=spec.max_value if spec else None,
         )
 
         if not within_spec and spec:
@@ -157,13 +193,22 @@ def complete_step(
 
     audit_service.log_event(
         user=operator,
-        action="step started",  # reuse action name per spec; logged as completion
+        action="step completed",
         entity_type="StepExecution",
         entity_id=exe.execution_id,
         old_value=StepStatus.IN_PROGRESS.value,
         new_value=StepStatus.COMPLETED.value,
         comment=f"Batch {batch_id}, Step {step_id}. {comment}",
     )
+
+    # ── Integration: increment MES production count ────────────────────────
+    _fire_integration(
+        "on_step_completed",
+        batch_id=batch_id,
+        step_name=exe.step_name,
+        operator=operator,
+    )
+
     return exe
 
 
@@ -185,7 +230,6 @@ def mark_step_deviated(
         exe.started_at = now_iso()
     update_execution(exe)
 
-    recipe = get_recipe(get_batch(batch_id).recipe_id if get_batch(batch_id) else "")
     step_name = exe.step_name
 
     dev = open_deviation(
@@ -206,6 +250,16 @@ def mark_step_deviated(
         new_value=StepStatus.DEVIATED.value,
         comment=f"Batch {batch_id}, Step {step_id}: {description}",
     )
+
+    # ── Integration: notify MES + pull PCS alarms ─────────────────────────
+    _fire_integration(
+        "on_deviation_opened",
+        batch_id=batch_id,
+        step_name=step_name,
+        description=description,
+        severity=severity.value,
+    )
+
     return exe, dev
 
 
@@ -242,6 +296,14 @@ def skip_step(
             entity_id=exe.execution_id,
             new_value=StepStatus.SKIPPED.value,
             comment=f"Mandatory step skipped: {reason}",
+        )
+        # ── Integration: critical deviation notification ───────────────────
+        _fire_integration(
+            "on_deviation_opened",
+            batch_id=batch_id,
+            step_name=exe.step_name,
+            description=f"Mandatory step skipped: {reason}",
+            severity=DeviationSeverity.CRITICAL.value,
         )
 
     _advance_batch_step(batch_id, step_id)

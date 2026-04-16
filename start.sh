@@ -28,6 +28,15 @@ echo "Starting Unified Interface on port 5000..."
 nohup python3 common/interface.py > logs/interface.log 2>&1 & echo $! > logs/interface.pid
 sleep 3
 
+# Start Pharma Batch Execution Simulator
+echo "Starting Pharma Batch Simulator on port 8501..."
+nohup streamlit run pharma/app/main.py \
+    --server.port 8501 \
+    --server.address 0.0.0.0 \
+    --server.headless true \
+    > logs/pharma.log 2>&1 & echo $! > logs/pharma.pid
+sleep 3
+
 # Check if services are running
 echo ""
 echo "Checking service status..."
@@ -43,10 +52,19 @@ check_service() {
     fi
 }
 
+check_pharma() {
+    if curl -s http://localhost:8501/_stcore/health > /dev/null 2>&1; then
+        echo "✓ Pharma Simulator is running on port 8501"
+    else
+        echo "✗ Pharma Simulator failed to start on port 8501"
+    fi
+}
+
 check_service 5001 "ERP"
 check_service 5002 "MES"
 check_service 5003 "PCS"
 check_service 5000 "Interface"
+check_pharma
 
 echo ""
 echo "=================================================="
@@ -55,12 +73,15 @@ echo ""
 echo "Access the system at: http://localhost:5000"
 echo ""
 echo "Available pages:"
-echo "  - Main Dashboard:    http://localhost:5000/"
-echo "  - Order Workflow:    http://localhost:5000/order-workflow"
-echo "  - PCS (Alarms):      http://localhost:5000/pcs"
-echo "  - ERP Dashboard:     http://localhost:5000/erp"
-echo "  - MES Dashboard:     http://localhost:5000/mes"
-echo "ERP Master Data UI: http://localhost:5001/master_data"
+echo "  - Main Dashboard:         http://localhost:5000/"
+echo "  - Order Workflow:         http://localhost:5000/order-workflow"
+echo "  - PCS (Alarms):           http://localhost:5000/pcs"
+echo "  - ERP Dashboard:          http://localhost:5000/erp"
+echo "  - MES Dashboard:          http://localhost:5000/mes"
+echo "  - ERP Master Data UI:     http://localhost:5001/master_data"
+echo ""
+echo "  - Pharma Batch Simulator: http://localhost:8501"
+echo "    (wired to ERP/MES/PCS – integration status visible in sidebar)"
 echo ""
 echo "To stop the system, run: ./stop.sh"
 echo "=================================================="

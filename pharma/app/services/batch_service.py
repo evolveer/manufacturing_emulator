@@ -1,10 +1,12 @@
 """
 Batch Service
 Manages batch lifecycle: instantiation from orders, status transitions, and retrieval.
+Integration hooks fire MES and PCS calls at each lifecycle event.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from ..domain.enums import BatchStatus
@@ -14,8 +16,19 @@ from ..utils.persistence import get_by_id, load_all, upsert
 from . import audit_service
 from .recipe_service import get_recipe
 
+logger = logging.getLogger("pharma.services.batch")
+
 ENTITY = "batches"
 EXEC_ENTITY = "step_executions"
+
+
+def _fire_integration(fn_name: str, *args, **kwargs) -> None:
+    """Call an integration orchestrator function, swallowing all errors."""
+    try:
+        from ..integration import orchestrator as orch
+        getattr(orch, fn_name)(*args, **kwargs)
+    except Exception as exc:
+        logger.warning("Integration hook %s failed (non-fatal): %s", fn_name, exc)
 
 
 def create_batch(
@@ -44,6 +57,7 @@ def create_batch(
     )
 
     # Initialise step executions
+    from ..domain.enums import StepStatus
     executions: List[StepExecution] = []
     for step in sorted(recipe.steps, key=lambda s: s.sequence):
         exe = StepExecution(
@@ -56,9 +70,7 @@ def create_batch(
 
     if executions:
         batch.current_step_id = executions[0].step_id
-        executions[0].status = __import__(
-            "pharma.app.domain.enums", fromlist=["StepStatus"]
-        ).StepStatus.READY
+        executions[0].status = StepStatus.READY
 
     upsert(ENTITY, Batch, batch, "batch_id")
     for exe in executions:
@@ -72,6 +84,22 @@ def create_batch(
         new_value=BatchStatus.CREATED.value,
         comment=f"Order {order_id}, Recipe {recipe_id}",
     )
+
+    # ── Integration: create MES work order + start PCS machine ────────────
+    recipe_steps_info = [
+        {"step_id": s.step_id, "name": s.name, "sequence": s.sequence}
+        for s in recipe.steps
+    ]
+    _fire_integration(
+        "on_batch_created",
+        batch_id=batch.batch_id,
+        pharma_order_id=order_id,
+        product_code=product_code,
+        product_name=product_name,
+        quantity=quantity,
+        recipe_steps=recipe_steps_info,
+    )
+
     return batch
 
 
@@ -112,10 +140,33 @@ def set_batch_status(batch_id: str, status: BatchStatus, user: str = "system") -
     upsert(ENTITY, Batch, batch, "batch_id")
     audit_service.log_event(
         user=user,
-        action="disposition changed",
+        action="batch status changed",
         entity_type="Batch",
         entity_id=batch_id,
         old_value=old,
         new_value=status.value,
     )
+
+    # ── Integration hooks ──────────────────────────────────────────────────
+    if status == BatchStatus.COMPLETED:
+        _fire_integration(
+            "on_batch_completed",
+            batch_id=batch_id,
+            product_code=batch.product_code,
+            quantity=batch.quantity,
+        )
+    elif status == BatchStatus.RELEASED:
+        _fire_integration(
+            "on_batch_released",
+            batch_id=batch_id,
+            product_code=batch.product_code,
+            quantity=batch.quantity,
+        )
+    elif status in (BatchStatus.REJECTED, BatchStatus.ON_HOLD):
+        _fire_integration(
+            "on_batch_rejected",
+            batch_id=batch_id,
+            reason=f"Batch status set to {status.value}",
+        )
+
     return batch

@@ -71,6 +71,23 @@ interface:
   host: '0.0.0.0'
   port: 5000
   api_version: 'v1'
+pharma:
+  host: 0.0.0.0
+  port: 8501
+  data_directory: ./pharma/data
+  integration:
+    erp_url: http://localhost:5001/api/v1
+    mes_url: http://localhost:5002/api/v1
+    pcs_url: http://localhost:5003/api/v1
+    timeout_seconds: 5
+    strict_mode: false   # if true, integration failures raise exceptions
+  modules:
+  - orders
+  - batch_execution
+  - deviations
+  - audit_trail
+  - review_release
+  - integration_status
 sync:
   enabled: true
   intervals:
@@ -78,3 +95,6 @@ sync:
     mes_to_erp: 120       # every 2 minutes (order updates/status)
     mes_to_pcs: 30        # every 30 seconds (work orders to machines)
     pcs_to_mes: 15        # every 15 seconds (sensor data/feedback)
+    pharma_to_erp: 30    # every 30 seconds (batch status → ERP orders)
+    pharma_to_mes: 15    # every 15 seconds (step completions → MES work orders)
+    pcs_to_pharma: 10    # every 10 seconds (sensor data → pharma parameters)

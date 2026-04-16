@@ -2,10 +2,12 @@
 Review Service
 Computes batch completeness, generates disposition recommendations,
 and persists review decisions.
+Integration hooks fire ERP stock updates on release and MES on_hold on reject.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional, Tuple
 
 from ..domain.enums import BatchStatus, DeviationSeverity, DeviationStatus, Disposition, ReviewStatus, StepStatus
@@ -17,7 +19,18 @@ from .batch_service import get_batch, get_executions_for_batch, update_batch
 from .deviation_service import get_deviations_for_batch
 from .recipe_service import get_recipe
 
+logger = logging.getLogger("pharma.services.review")
+
 ENTITY = "review_decisions"
+
+
+def _fire_integration(fn_name: str, *args, **kwargs) -> None:
+    """Call an integration orchestrator function, swallowing all errors."""
+    try:
+        from ..integration import orchestrator as orch
+        getattr(orch, fn_name)(*args, **kwargs)
+    except Exception as exc:
+        logger.warning("Integration hook %s failed (non-fatal): %s", fn_name, exc)
 
 
 def compute_review(batch_id: str) -> ReviewDecision:
@@ -72,7 +85,7 @@ def submit_review(
     disposition: Disposition,
     comment: str = "",
 ) -> ReviewDecision:
-    """Persist a reviewer's disposition decision."""
+    """Persist a reviewer's disposition decision and fire integration hooks."""
     decision = compute_review(batch_id)
     decision.reviewer = reviewer
     decision.disposition = disposition
@@ -89,6 +102,8 @@ def submit_review(
         batch.review_comment = comment
         if disposition == Disposition.RELEASE:
             batch.status = BatchStatus.RELEASED
+        elif disposition == Disposition.RELEASE_WITH_COMMENTS:
+            batch.status = BatchStatus.RELEASED
         elif disposition == Disposition.REJECT_HOLD:
             batch.status = BatchStatus.REJECTED
         update_batch(batch)
@@ -101,6 +116,23 @@ def submit_review(
         new_value=disposition.value,
         comment=comment,
     )
+
+    # ── Integration hooks ──────────────────────────────────────────────────
+    if batch:
+        if disposition in (Disposition.RELEASE, Disposition.RELEASE_WITH_COMMENTS):
+            _fire_integration(
+                "on_batch_released",
+                batch_id=batch_id,
+                product_code=batch.product_code,
+                quantity=batch.quantity,
+            )
+        elif disposition == Disposition.REJECT_HOLD:
+            _fire_integration(
+                "on_batch_rejected",
+                batch_id=batch_id,
+                reason=comment or "Rejected by QA reviewer",
+            )
+
     return decision
 
 

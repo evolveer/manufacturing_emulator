@@ -22,8 +22,25 @@ st.set_page_config(
 from pharma.app.data.demo_loader import load_all_demo_scenarios
 load_all_demo_scenarios()
 
-# Sidebar navigation
+# ── Sidebar ────────────────────────────────────────────────────────────────
 st.sidebar.title("⚗️ Pharma Batch Simulator")
+st.sidebar.markdown("---")
+
+# System health indicator (non-blocking)
+try:
+    from pharma.app.integration.orchestrator import get_system_health
+    health = get_system_health()
+    erp_ok = health.get("ERP", {}).get("online", False)
+    mes_ok = health.get("MES", {}).get("online", False)
+    pcs_ok = health.get("PCS", {}).get("online", False)
+    icons = {True: "🟢", False: "🔴"}
+    st.sidebar.markdown(
+        f"**Connected Systems**  \n"
+        f"{icons[erp_ok]} ERP &nbsp; {icons[mes_ok]} MES &nbsp; {icons[pcs_ok]} PCS"
+    )
+except Exception:
+    st.sidebar.markdown("**Connected Systems**  \n⚪ ERP &nbsp; ⚪ MES &nbsp; ⚪ PCS")
+
 st.sidebar.markdown("---")
 
 PAGES = {
@@ -33,12 +50,16 @@ PAGES = {
     "⚠️ Deviations": "deviations",
     "📜 Audit Trail": "audit_trail",
     "✅ Review & Release": "review",
+    "🔌 Integration Status": "integration",
 }
 
 selection = st.sidebar.radio("Navigation", list(PAGES.keys()))
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Simulated pharma batch execution workflow covering MES order flow, step execution, audit trail, deviations, and release review in a regulated manufacturing context.")
+st.sidebar.caption(
+    "Pharma batch execution simulator wired to ERP, MES, and PCS. "
+    "Covers order flow, step execution, quality checks, deviations, audit trail, and release review."
+)
 st.sidebar.markdown("---")
 
 if st.sidebar.button("🔄 Reset Demo Data"):
@@ -48,7 +69,7 @@ if st.sidebar.button("🔄 Reset Demo Data"):
     st.sidebar.success("Demo data reset.")
     st.rerun()
 
-# Route to page
+# ── Page routing ───────────────────────────────────────────────────────────
 page_module = PAGES[selection]
 
 if page_module == "dashboard":
@@ -69,3 +90,6 @@ elif page_module == "audit_trail":
 elif page_module == "review":
     from pharma.app.pages import review
     review.render()
+elif page_module == "integration":
+    from pharma.app.pages import integration
+    integration.render()

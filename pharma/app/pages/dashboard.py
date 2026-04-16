@@ -1,7 +1,7 @@
 """
 Dashboard Page
 Provides an operational overview: batch status summary, deviation counts,
-disposition breakdown, and recent audit events.
+disposition breakdown, recent audit events, and live integration health panel.
 """
 
 from __future__ import annotations
@@ -19,9 +19,61 @@ from pharma.app.services.order_service import get_all_orders
 from pharma.app.utils.helpers import badge, fmt_dt
 
 
+def _render_integration_health() -> None:
+    """Compact system health strip at the top of the dashboard."""
+    st.subheader("Connected Systems")
+    try:
+        from pharma.app.integration.orchestrator import get_system_health
+        health = get_system_health()
+    except Exception:
+        st.caption("Integration module not loaded.")
+        return
+
+    cols = st.columns(3)
+    for col, key in zip(cols, ["ERP", "MES", "PCS"]):
+        info = health.get(key, {})
+        online = info.get("online", False)
+        with col:
+            if online:
+                st.success(f"**{key}** 🟢 Online  \n`{info.get('url', '')}`")
+            else:
+                st.warning(f"**{key}** 🔴 Offline  \n`{info.get('url', '')}`")
+
+
+def _render_pcs_strip() -> None:
+    """One-line sensor strip from PCS (non-blocking)."""
+    try:
+        from pharma.app.integration.pcs_client import PCSClient
+        pcs = PCSClient()
+        if not pcs.is_online():
+            return
+        machines = pcs.get_all_machines_status()
+        if not machines:
+            return
+        mid = machines[0].get("id")
+        if not mid:
+            return
+        sensors = pcs.get_latest_sensor_data(mid)
+        if not sensors:
+            return
+        st.subheader("PCS – Live Sensor Readings (Machine 1)")
+        sensor_cols = st.columns(min(len(sensors), 4))
+        for col, s in zip(sensor_cols, sensors[:4]):
+            col.metric(
+                label=s.get("sensor_name", "sensor"),
+                value=f"{round(s.get('value', 0), 2)}",
+            )
+    except Exception:
+        pass  # PCS offline – silent
+
+
 def render() -> None:
     st.title("📊 Operations Dashboard")
-    st.caption("Real-time overview of batch execution status, deviations, and recent activity.")
+    st.caption("Real-time overview of batch execution status, deviations, and system integration.")
+    st.markdown("---")
+
+    # ── Integration health ────────────────────────────────────────────────
+    _render_integration_health()
     st.markdown("---")
 
     batches = get_all_batches()
@@ -47,6 +99,9 @@ def render() -> None:
     col5.metric("On Hold / Rejected", on_hold)
 
     st.markdown("---")
+
+    # ── PCS sensor strip ──────────────────────────────────────────────────
+    _render_pcs_strip()
 
     # ── Charts row ────────────────────────────────────────────────────────────
     chart_col1, chart_col2, chart_col3 = st.columns(3)

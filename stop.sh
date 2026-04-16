@@ -23,6 +23,7 @@ stop_service() {
 }
 
 # Stop all services
+stop_service "logs/pharma.pid" "Pharma Batch Simulator"
 stop_service "logs/interface.pid" "Unified Interface"
 stop_service "logs/echotrace.pid" "EchoTrace Service"
 stop_service "logs/pcs.pid" "PCS Service"
