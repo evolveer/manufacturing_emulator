@@ -113,27 +113,48 @@ class DataSynchronizer:
         logger.info("All synchronization threads stopped")
     
     def _sync_loop(self, name, sync_func, interval):
-        """Run a synchronization function in a loop"""
-        logger.info(f"Starting {name} synchronization loop with interval {interval} seconds")
-        
+        """Run a synchronization function in a loop.
+
+        L2 fix: adds per-thread startup jitter (up to 20 % of interval) so
+        that all sync threads do not fire simultaneously on startup, which
+        previously flooded the logs and caused spurious connection errors.
+        Also uses exponential back-off (capped at 60 s) on repeated failures
+        instead of a fixed 5 s retry delay.
+        """
+        import random
+        # Stagger thread starts to avoid thundering-herd on startup
+        startup_jitter = random.uniform(0, max(1.0, interval * 0.2))
+        logger.info(
+            f"Starting {name} synchronization loop "
+            f"(interval={interval}s, startup_jitter={startup_jitter:.1f}s)"
+        )
+        self.stop_event.wait(startup_jitter)
+
+        consecutive_failures = 0
         while not self.stop_event.is_set():
             try:
                 # Run synchronization function
                 sync_func()
-                
+
                 # Update last sync timestamp
                 self.last_sync[name] = datetime.datetime.now()
-                
-                # Sleep until next sync
-                for _ in range(int(interval * 10)):  # Check stop event every 100ms
+                consecutive_failures = 0  # reset back-off counter on success
+
+                # Sleep until next sync, checking stop_event every 100 ms
+                for _ in range(int(interval * 10)):
                     if self.stop_event.is_set():
                         break
                     time.sleep(0.1)
-            
+
             except Exception as e:
-                logger.error(f"Error in {name} synchronization: {str(e)}")
-                # Sleep a bit before retrying
-                time.sleep(5)
+                consecutive_failures += 1
+                # Exponential back-off: 5s, 10s, 20s, 40s, capped at 60s
+                backoff = min(60, 5 * (2 ** (consecutive_failures - 1)))
+                logger.error(
+                    f"Error in {name} synchronization (attempt {consecutive_failures}): "
+                    f"{e}  — retrying in {backoff}s"
+                )
+                self.stop_event.wait(backoff)
     
     def _sync_erp_to_mes(self):
         """Synchronize data from ERP to MES"""

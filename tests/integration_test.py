@@ -12,8 +12,11 @@ import subprocess
 import yaml
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent.absolute()
+# L1 fix: project_root must be the repo root (parent of tests/), not tests/ itself.
+# The old code used Path(__file__).parent which resolved to tests/ and caused
+# config.yaml to be looked up at tests/config.yaml (which does not exist).
+tests_dir = Path(__file__).parent.absolute()
+project_root = tests_dir.parent
 sys.path.append(str(project_root))
 
 # Configure logging
@@ -22,26 +25,57 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(os.path.join(project_root, 'test_results.log'))
+        logging.FileHandler(os.path.join(tests_dir, 'test_results.log'))
     ]
 )
 
 logger = logging.getLogger('integration_test')
 
-# Load configuration
+
 def load_config():
-    """Load configuration from file"""
+    """Load configuration from the repo-root config.yaml.
+
+    L1 fix: config path is now derived from project_root (repo root), not
+    from the tests/ subdirectory.
+    """
     config_path = os.path.join(project_root, 'config.yaml')
     with open(config_path, 'r') as file:
         return yaml.safe_load(file)
 
+
 config = load_config()
 
-# System URLs
-erp_url = f"http://{config['erp']['host']}:{config['erp']['port']}/api/{config['erp']['api_version']}"
-mes_url = f"http://{config['mes']['host']}:{config['mes']['port']}/api/{config['mes']['api_version']}"
-pcs_url = f"http://{config['pcs']['host']}:{config['pcs']['port']}/api/{config['pcs']['api_version']}"
-interface_url = f"http://{config['interface']['host']}:{config['interface']['port']}"
+
+def _build_url(section: str, path: str = '') -> str:
+    """Build a service URL from config, with environment-variable override.
+
+    L1 fix: allows Docker Compose or CI environments to override URLs via
+    environment variables (e.g. ERP_URL, MES_URL, PCS_URL, INTERFACE_URL)
+    without modifying config.yaml.
+
+    The config host '0.0.0.0' (bind address) is automatically translated to
+    'localhost' for client-side connections.
+    """
+    env_key = f"{section.upper()}_URL"
+    env_override = os.environ.get(env_key)
+    if env_override:
+        return env_override.rstrip('/') + ('/' + path.lstrip('/') if path else '')
+    host = config[section]['host']
+    # '0.0.0.0' is a bind address; translate to 'localhost' for outbound calls
+    if host == '0.0.0.0':
+        host = 'localhost'
+    port = config[section]['port']
+    base = f"http://{host}:{port}"
+    if 'api_version' in config[section]:
+        base += f"/api/{config[section]['api_version']}"
+    return base + ('/' + path.lstrip('/') if path else '')
+
+
+# System URLs — derived from config.yaml with env-var override support
+erp_url = _build_url('erp')
+mes_url = _build_url('mes')
+pcs_url = _build_url('pcs')
+interface_url = f"http://{'localhost' if config['interface']['host'] == '0.0.0.0' else config['interface']['host']}:{config['interface']['port']}"
 
 # Test results
 test_results = {

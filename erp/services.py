@@ -449,6 +449,13 @@ class OrderService:
         finally:
             close_db_session(session)
     
+    # L4: canonical set of valid ERP order statuses.
+    # Used by create_order and update_order_status to reject unknown values
+    # before they reach the database, giving callers a clear 400 error.
+    VALID_ORDER_STATUSES = frozenset({
+        'draft', 'confirmed', 'in_production', 'completed', 'cancelled'
+    })
+
     @staticmethod
     def create_order(order_data):
         """Create a new order"""
@@ -457,11 +464,20 @@ class OrderService:
             # Generate order number if not provided
             if 'order_number' not in order_data:
                 order_data['order_number'] = f"ORD-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+
+            # L4: validate status before hitting the database
+            incoming_status = order_data.get('status', 'draft')
+            if incoming_status not in OrderService.VALID_ORDER_STATUSES:
+                raise ValueError(
+                    f"Invalid order status '{incoming_status}'. "
+                    f"Allowed values: {sorted(OrderService.VALID_ORDER_STATUSES)}"
+                )
+            order_data['status'] = incoming_status
+
             # Convert ISO format strings to datetime objects
             order_date = order_data.get("order_date", datetime.utcnow())
             if isinstance(order_date, str):
                 order_date = datetime.fromisoformat(order_date.replace("Z", "+00:00"))
-
             due_date = order_data.get("due_date")
             if due_date and isinstance(due_date, str):
                 due_date = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
@@ -624,12 +640,18 @@ class OrderService:
     @staticmethod
     def update_order_status(order_id, status):
         """Update order status"""
+        # L4: validate status enum before touching the database
+        if status not in OrderService.VALID_ORDER_STATUSES:
+            raise ValueError(
+                f"Invalid order status '{status}'. "
+                f"Allowed values: {sorted(OrderService.VALID_ORDER_STATUSES)}"
+            )
         session = get_db_session()
         try:
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
                 return None
-            
+
             order.status = status
             session.commit()
             try:

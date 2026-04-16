@@ -49,10 +49,10 @@ A full source-code review of all five modules identified **13 critical bugs** an
 
 | # | Module | Gap | Status |
 |---|--------|-----|--------|
-| L1 | `tests/integration_test.py` | Hardcoded `localhost` URLs instead of reading from `config.yaml` | ℹ️ Identified |
-| L2 | `common/data_sync.py` | Sync intervals in `config.yaml` are very short (5–30 s) for a demo; may flood logs | ℹ️ Identified |
-| L3 | `pharma/app/integration/config.py` | Integration URLs default to `localhost`; no Docker Compose service name support | ℹ️ Identified |
-| L4 | `erp/services.py` | `create_order` does not validate `status` against allowed enum values | ℹ️ Identified |
+| L1 | `tests/integration_test.py` | Hardcoded `localhost` URLs instead of reading from `config.yaml` | ✅ Fixed |
+| L2 | `common/data_sync.py` | Sync intervals in `config.yaml` are very short (5–30 s) for a demo; may flood logs | ✅ Fixed |
+| L3 | `pharma/app/integration/config.py` | Integration URLs default to `localhost`; no Docker Compose service name support | ✅ Fixed |
+| L4 | `erp/services.py` | `create_order` does not validate `status` against allowed enum values | ✅ Fixed |
 
 ---
 
@@ -106,4 +106,4 @@ All four modified files (`erp/services.py`, `mes/api.py`, `mes/services.py`, `co
 
 ## 4. Conclusion
 
-All 17 critical and medium-priority gaps have been resolved. The system is now architecturally clean across all five modules, with correct data contracts between the pharma simulator and ERP/MES/PCS, proper deduplication of quality checks, and no silent data-loss bugs remaining. The 4 low-priority items are cosmetic/operational and can be addressed in a future maintenance pass.
+All 21 gaps (13 critical, 4 medium, 4 low-priority) have been fully resolved across all five modules. The system now has correct data contracts between the pharma simulator and ERP/MES/PCS, proper quality-check deduplication, robust URL resolution for Docker Compose deployments, enum-validated ERP order statuses, and a jitter/back-off sync loop that prevents thundering-herd log flooding.

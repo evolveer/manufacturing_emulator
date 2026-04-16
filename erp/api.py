@@ -355,9 +355,12 @@ class OrderListAPI(Resource):
             order_data = request.get_json()
             if not order_data:
                 return {'error': 'No data provided'}, 400
-            
+
             order = OrderService.create_order(order_data)
             return order, 201
+        except ValueError as e:
+            # L4: invalid status enum or missing required field
+            return {'error': str(e)}, 400
         except Exception as e:
             return {'error': str(e)}, 500
 
@@ -446,12 +449,15 @@ class OrderStatusAPI(Resource):
             data = request.get_json()
             if not data or 'status' not in data:
                 return {'error': 'No status provided'}, 400
-            
+
             order = OrderService.update_order_status(order_id, data['status'])
             if not order:
                 return {'error': 'Order not found'}, 404
-            
+
             return order
+        except ValueError as e:
+            # L4: invalid status enum value — return 400 not 500
+            return {'error': str(e)}, 400
         except Exception as e:
             return {'error': str(e)}, 500
 
