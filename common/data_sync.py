@@ -788,48 +788,74 @@ class DataSynchronizer:
                 # Filter active alarms
                 active_alarms = [a for a in alarms if a['status'] == 'active']
                 
+                # Fetch existing quality checks for this work order once per machine
+                # to perform real deduplication (M3 fix: the MES GET /quality-checks
+                # endpoint ignores query params, so we use the work-order-scoped
+                # endpoint and match by alarm id embedded in the 'notes' field).
+                existing_notes: set = set()
+                wo_checks_resp = requests.get(
+                    f"{self.mes_url}/work-orders/{work_order_id}/quality-checks"
+                )
+                if wo_checks_resp.status_code == 200:
+                    for chk in wo_checks_resp.json():
+                        if chk.get('notes'):
+                            existing_notes.add(chk['notes'])
+                else:
+                    logger.warning(
+                        f"Could not fetch existing quality checks for WO {work_order_id}: "
+                        f"{wo_checks_resp.status_code}"
+                    )
+
                 # For each active alarm, create a quality check in MES if not already exists
                 for alarm in active_alarms:
-                    # Check if quality check already exists for this alarm
-                    response = requests.get(f"{self.mes_url}/quality-checks", params={
-                        'reference_id': str(alarm['id']),
-                        'reference_type': 'pcs_alarm'
-                    })
-                    
-                    if response.status_code != 200:
-                        logger.error(f"Failed to check quality checks for alarm {alarm['id']}: {response.text}")
-                        continue
-                    
-                    existing_checks = response.json()
-                    
-                    if not existing_checks:
-                        # Map PCS alarm severity to MES quality check status.
-                        # PCS severities: 'info', 'warning', 'error', 'critical'.
-                        # MES QualityCheck.status accepts: 'pass', 'fail', 'warning'.
-                        alarm_severity = alarm.get('severity', 'info')
-                        if alarm_severity in ('error', 'critical', 'high'):
-                            qc_status = 'fail'
-                        elif alarm_severity == 'warning':
-                            qc_status = 'warning'
-                        else:
-                            qc_status = 'pass'
-                        # Create quality check using only fields the MES model supports
-                        response = requests.post(
-                            f"{self.mes_url}/quality-checks",
-                            json={
-                                'work_order_id': work_order_id,
-                                'parameter': alarm.get('alarm_code', 'ALARM'),
-                                'value': 0.0,
-                                'status': qc_status,
-                                'notes': f"[PCS Alarm id={alarm['id']}] {alarm.get('description', '')}",
-                            }
+                    alarm_id = alarm['id']
+                    # Build the canonical notes tag used for deduplication
+                    notes_tag = f"[PCS Alarm id={alarm_id}]"
+
+                    # Skip if a quality check with this alarm's notes tag already exists
+                    if any(notes_tag in n for n in existing_notes):
+                        logger.debug(
+                            f"Quality check for alarm {alarm_id} already exists, skipping"
                         )
-                        
-                        if response.status_code != 201:
-                            logger.error(f"Failed to create quality check for alarm {alarm['id']}: {response.text}")
-                            continue
-                        
-                        logger.info(f"Created quality check for alarm {alarm['id']} on machine {machine_id}")
+                        continue
+
+                    # Map PCS alarm severity to MES quality check status.
+                    # PCS severities: 'info', 'warning', 'error', 'critical', 'high'.
+                    # MES QualityCheck.status accepts: 'pass', 'fail', 'warning'.
+                    alarm_severity = alarm.get('severity', 'info')
+                    if alarm_severity in ('error', 'critical', 'high'):
+                        qc_status = 'fail'
+                    elif alarm_severity == 'warning':
+                        qc_status = 'warning'
+                    else:
+                        qc_status = 'pass'
+
+                    notes_value = f"{notes_tag} {alarm.get('description', '')}".strip()
+
+                    # Create quality check using only fields the MES model supports
+                    response = requests.post(
+                        f"{self.mes_url}/quality-checks",
+                        json={
+                            'work_order_id': work_order_id,
+                            'parameter': alarm.get('alarm_code', 'ALARM'),
+                            'value': 0.0,
+                            'status': qc_status,
+                            'notes': notes_value,
+                        }
+                    )
+
+                    if response.status_code != 201:
+                        logger.error(
+                            f"Failed to create quality check for alarm {alarm_id}: {response.text}"
+                        )
+                        continue
+
+                    # Track newly created note so subsequent alarms in the same
+                    # loop iteration also benefit from deduplication
+                    existing_notes.add(notes_value)
+                    logger.info(
+                        f"Created quality check for alarm {alarm_id} on machine {machine_id}"
+                    )
             
             logger.info(f"Synchronized quality data for {len(machines_status)} machines from PCS to MES")
         

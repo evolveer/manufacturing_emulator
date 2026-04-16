@@ -220,6 +220,7 @@ class WorkOrderService:
                     'start_time': wo.start_time.isoformat() if wo.start_time else None,
                     'end_time': wo.end_time.isoformat() if wo.end_time else None
                 })
+            return result  # M2 fix: was missing, method always returned None
         finally:
             close_db_session(session)
     
@@ -909,18 +910,7 @@ class QualityService:
         finally:
             close_db_session(session)
             
-class MaterialByCodeAPI(Resource):
-    def get(self, code):
-        """Get material by code"""
-        try:
-            from services import MaterialService  # Make sure it's imported
-            materials = MaterialService.get_all_materials()
-            for material in materials:
-                if material['code'] == code:
-                    return material
-            return {'error': 'Material not found'}, 404
-        except Exception as e:
-            return {'error': str(e)}, 500
+# MaterialByCodeAPI has been moved to api.py (M4 fix: correct architectural layer)
 
 class MaterialService:
     @staticmethod

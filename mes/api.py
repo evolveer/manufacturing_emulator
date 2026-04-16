@@ -8,10 +8,9 @@ import requests
 from flask import Flask, request, jsonify
 from flask_restful import Api, Resource
 from services import (
-
-
     WorkOrderService, MachineService, SchedulingService, QualityService,
-    MaterialTrackingService, ProductionCountService, DowntimeService,MaterialService,MaterialByCodeAPI,ProductionPlanService
+    MaterialTrackingService, ProductionCountService, DowntimeService,
+    MaterialService, ProductionPlanService,
 )
 
 # Load configuration
@@ -373,6 +372,21 @@ class MaterialAPI(Resource):
         return updated
 
 
+class MaterialByCodeAPI(Resource):
+    """Get a MES material by its unique code.
+
+    M4 fix: moved from services.py to api.py (correct architectural layer).
+    """
+    def get(self, code):
+        """Get material by code"""
+        try:
+            materials = MaterialService.get_all_materials()
+            for material in materials:
+                if material.get('code') == code:
+                    return material
+            return {'error': 'Material not found'}, 404
+        except Exception as e:
+            return {'error': str(e)}, 500
 
 
 class MachineByCodeAPI(Resource):

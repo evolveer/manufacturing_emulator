@@ -908,12 +908,30 @@ class ProductionPlanService:
             if plan.order_id:
                 ProductionPlanService._release_materials_for_order(session, plan.order_id)
             
-            # Update order status if plan is deleted
+            # Revert order status only when it is safe to do so.
+            # Valid terminal states ('completed', 'cancelled') must never be
+            # overwritten; only revert from 'in_production' → 'confirmed'.
+            REVERTIBLE_STATUSES = {'in_production'}
             if plan.order_id:
                 order = session.query(Order).filter(Order.id == plan.order_id).first()
-                if order and order.status == 'in_production':
-                    order.status = 'confirmed'  # Revert to confirmed status
-            
+                if order and order.status in REVERTIBLE_STATUSES:
+                    old_status = order.status
+                    order.status = 'confirmed'
+                    try:
+                        log_audit_trail(
+                            user_id=AUDIT_USER_ID,
+                            username=AUDIT_USERNAME,
+                            action='UPDATE',
+                            entity_type='Order',
+                            entity_id=order.id,
+                            source_system='ERP',
+                            entity_name=order.order_number,
+                            changes={'status': {'from': old_status, 'to': 'confirmed',
+                                               'reason': f'production plan {plan_id} deleted'}},
+                        )
+                    except Exception as audit_err:
+                        logger.warning('Audit log failed for order reversion %s: %s', order.id, audit_err)
+
             session.delete(plan)
             session.commit()
             return True
