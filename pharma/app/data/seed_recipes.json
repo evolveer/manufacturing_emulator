@@ -1,0 +1,587 @@
+[
+  {
+    "recipe_id": "RCP-TABLET-001",
+    "name": "Tablet Manufacturing – Standard Granulation",
+    "product_code": "TAB-500MG",
+    "version": "2.1",
+    "created_at": "2024-01-15T08:00:00",
+    "steps": [
+      {
+        "step_id": "S01",
+        "name": "Line Clearance",
+        "sequence": 1,
+        "required": true,
+        "expected_duration_min": 20,
+        "description": "Verify equipment is clean, calibrated, and area is cleared of previous product.",
+        "acceptance_criteria": "Checklist complete, no foreign materials present",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "clearance_result",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "S02",
+        "name": "Weigh Materials",
+        "sequence": 2,
+        "required": true,
+        "expected_duration_min": 45,
+        "description": "Weigh all active and excipient materials per batch formula.",
+        "acceptance_criteria": "All weights within ±0.5% of target",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "api_weight_kg",
+            "unit": "kg",
+            "required": true,
+            "data_type": "float",
+            "min_value": 4.975,
+            "max_value": 5.025,
+            "allowed_values": null
+          },
+          {
+            "name": "excipient_weight_kg",
+            "unit": "kg",
+            "required": true,
+            "data_type": "float",
+            "min_value": 9.95,
+            "max_value": 10.05,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "S03",
+        "name": "Granulation – Wet Mix",
+        "sequence": 3,
+        "required": true,
+        "expected_duration_min": 60,
+        "description": "Blend API with excipients in high-shear granulator with binder solution.",
+        "acceptance_criteria": "Granule size D90 < 500 µm; moisture < 3%",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "mixing_speed_rpm",
+            "unit": "rpm",
+            "required": true,
+            "data_type": "float",
+            "min_value": 200,
+            "max_value": 400,
+            "allowed_values": null
+          },
+          {
+            "name": "temperature_c",
+            "unit": "°C",
+            "required": true,
+            "data_type": "float",
+            "min_value": 18,
+            "max_value": 25,
+            "allowed_values": null
+          },
+          {
+            "name": "mix_duration_min",
+            "unit": "min",
+            "required": true,
+            "data_type": "float",
+            "min_value": 55,
+            "max_value": 65,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "S04",
+        "name": "Drying",
+        "sequence": 4,
+        "required": true,
+        "expected_duration_min": 90,
+        "description": "Dry granules in fluid bed dryer to target moisture content.",
+        "acceptance_criteria": "Loss on drying < 2.0%",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "inlet_air_temp_c",
+            "unit": "°C",
+            "required": true,
+            "data_type": "float",
+            "min_value": 55,
+            "max_value": 65,
+            "allowed_values": null
+          },
+          {
+            "name": "lod_percent",
+            "unit": "%",
+            "required": true,
+            "data_type": "float",
+            "min_value": 0.5,
+            "max_value": 2.0,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "S05",
+        "name": "Blending",
+        "sequence": 5,
+        "required": true,
+        "expected_duration_min": 30,
+        "description": "Blend dried granules with lubricants in tumble blender.",
+        "acceptance_criteria": "Blend uniformity RSD < 5%",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "blend_time_min",
+            "unit": "min",
+            "required": true,
+            "data_type": "float",
+            "min_value": 25,
+            "max_value": 35,
+            "allowed_values": null
+          },
+          {
+            "name": "blend_speed_rpm",
+            "unit": "rpm",
+            "required": true,
+            "data_type": "float",
+            "min_value": 10,
+            "max_value": 20,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "S06",
+        "name": "Tablet Compression",
+        "sequence": 6,
+        "required": true,
+        "expected_duration_min": 120,
+        "description": "Compress blend into tablets using rotary tablet press.",
+        "acceptance_criteria": "Weight 500±25 mg; hardness 8–12 kP; friability < 0.5%",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "tablet_weight_mg",
+            "unit": "mg",
+            "required": true,
+            "data_type": "float",
+            "min_value": 475,
+            "max_value": 525,
+            "allowed_values": null
+          },
+          {
+            "name": "hardness_kp",
+            "unit": "kP",
+            "required": true,
+            "data_type": "float",
+            "min_value": 8,
+            "max_value": 12,
+            "allowed_values": null
+          },
+          {
+            "name": "yield_kg",
+            "unit": "kg",
+            "required": true,
+            "data_type": "float",
+            "min_value": 13.5,
+            "max_value": 15.0,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "S07",
+        "name": "In-Process Quality Check",
+        "sequence": 7,
+        "required": true,
+        "expected_duration_min": 30,
+        "description": "QC sampling and in-process testing of tablet attributes.",
+        "acceptance_criteria": "All IPC parameters within specification",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "dissolution_percent",
+            "unit": "%",
+            "required": true,
+            "data_type": "float",
+            "min_value": 80,
+            "max_value": 100,
+            "allowed_values": null
+          },
+          {
+            "name": "visual_inspection",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "S08",
+        "name": "Review Batch Record",
+        "sequence": 8,
+        "required": true,
+        "expected_duration_min": 30,
+        "description": "Supervisor reviews completed batch record for completeness and accuracy.",
+        "acceptance_criteria": "All entries legible, complete, and signed",
+        "parameters": [
+          {
+            "name": "reviewer_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "review_result",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      }
+    ]
+  },
+  {
+    "recipe_id": "RCP-INJECT-001",
+    "name": "Injectable Solution – Sterile Fill",
+    "product_code": "INJ-10MG",
+    "version": "1.3",
+    "created_at": "2024-02-01T08:00:00",
+    "steps": [
+      {
+        "step_id": "I01",
+        "name": "Line Clearance",
+        "sequence": 1,
+        "required": true,
+        "expected_duration_min": 30,
+        "description": "Verify cleanroom classification and equipment sterility.",
+        "acceptance_criteria": "Environmental monitoring within limits",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "clearance_result",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "I02",
+        "name": "Dispense API",
+        "sequence": 2,
+        "required": true,
+        "expected_duration_min": 30,
+        "description": "Weigh and dispense active pharmaceutical ingredient.",
+        "acceptance_criteria": "Weight within ±0.1% of target",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "api_weight_g",
+            "unit": "g",
+            "required": true,
+            "data_type": "float",
+            "min_value": 99.9,
+            "max_value": 100.1,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "I03",
+        "name": "Compounding",
+        "sequence": 3,
+        "required": true,
+        "expected_duration_min": 60,
+        "description": "Dissolve API in WFI and adjust pH.",
+        "acceptance_criteria": "pH 6.8–7.2; clarity: clear",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "ph_value",
+            "unit": "pH",
+            "required": true,
+            "data_type": "float",
+            "min_value": 6.8,
+            "max_value": 7.2,
+            "allowed_values": null
+          },
+          {
+            "name": "temperature_c",
+            "unit": "°C",
+            "required": true,
+            "data_type": "float",
+            "min_value": 18,
+            "max_value": 25,
+            "allowed_values": null
+          },
+          {
+            "name": "clarity_check",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "I04",
+        "name": "Sterile Filtration",
+        "sequence": 4,
+        "required": true,
+        "expected_duration_min": 45,
+        "description": "Filter solution through 0.22 µm sterilising filter.",
+        "acceptance_criteria": "Filter integrity test pass; bioburden < 0.1 CFU/mL",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "filter_integrity",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          },
+          {
+            "name": "filtration_pressure_bar",
+            "unit": "bar",
+            "required": true,
+            "data_type": "float",
+            "min_value": 0.5,
+            "max_value": 2.0,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "I05",
+        "name": "Aseptic Fill",
+        "sequence": 5,
+        "required": true,
+        "expected_duration_min": 120,
+        "description": "Fill solution into vials under aseptic conditions.",
+        "acceptance_criteria": "Fill volume 10±0.2 mL; container closure integrity pass",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "fill_volume_ml",
+            "unit": "mL",
+            "required": true,
+            "data_type": "float",
+            "min_value": 9.8,
+            "max_value": 10.2,
+            "allowed_values": null
+          },
+          {
+            "name": "yield_vials",
+            "unit": "vials",
+            "required": true,
+            "data_type": "float",
+            "min_value": 900,
+            "max_value": 1000,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "I06",
+        "name": "Visual Inspection",
+        "sequence": 6,
+        "required": true,
+        "expected_duration_min": 60,
+        "description": "100% visual inspection of filled vials for particulates and defects.",
+        "acceptance_criteria": "Reject rate < 0.5%",
+        "parameters": [
+          {
+            "name": "operator_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "inspection_result",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          },
+          {
+            "name": "reject_rate_percent",
+            "unit": "%",
+            "required": true,
+            "data_type": "float",
+            "min_value": 0,
+            "max_value": 0.5,
+            "allowed_values": null
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      },
+      {
+        "step_id": "I07",
+        "name": "Review Batch Record",
+        "sequence": 7,
+        "required": true,
+        "expected_duration_min": 30,
+        "description": "QA review of completed batch documentation.",
+        "acceptance_criteria": "All entries complete and verified",
+        "parameters": [
+          {
+            "name": "reviewer_id",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": null
+          },
+          {
+            "name": "review_result",
+            "unit": "",
+            "required": true,
+            "data_type": "string",
+            "min_value": null,
+            "max_value": null,
+            "allowed_values": ["Pass", "Fail"]
+          }
+        ],
+        "allowed_next_statuses": ["In Progress", "Completed", "Deviated", "Skipped"]
+      }
+    ]
+  }
+]

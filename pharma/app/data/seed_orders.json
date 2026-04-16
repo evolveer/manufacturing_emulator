@@ -1,0 +1,44 @@
+[
+  {
+    "order_id": "ORD-DEMO-001",
+    "product_code": "TAB-500MG",
+    "product_name": "Metformin Tablet 500mg",
+    "quantity": 15.0,
+    "unit": "kg",
+    "due_date": "2026-05-01",
+    "site": "Site A – Basel",
+    "status": "Sent to MES",
+    "created_at": "2026-04-10T07:00:00",
+    "created_by": "planner",
+    "batch_id_ref": null,
+    "notes": "Scenario A – Clean batch demo"
+  },
+  {
+    "order_id": "ORD-DEMO-002",
+    "product_code": "TAB-500MG",
+    "product_name": "Metformin Tablet 500mg",
+    "quantity": 15.0,
+    "unit": "kg",
+    "due_date": "2026-05-05",
+    "site": "Site A – Basel",
+    "status": "Sent to MES",
+    "created_at": "2026-04-11T07:00:00",
+    "created_by": "planner",
+    "batch_id_ref": null,
+    "notes": "Scenario B – Minor deviation demo"
+  },
+  {
+    "order_id": "ORD-DEMO-003",
+    "product_code": "INJ-10MG",
+    "product_name": "Ondansetron Injection 10mg/mL",
+    "quantity": 1000.0,
+    "unit": "vials",
+    "due_date": "2026-05-10",
+    "site": "Site B – Dublin",
+    "status": "Sent to MES",
+    "created_at": "2026-04-12T07:00:00",
+    "created_by": "planner",
+    "batch_id_ref": null,
+    "notes": "Scenario C – Critical hold demo"
+  }
+]
