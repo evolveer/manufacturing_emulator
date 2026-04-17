@@ -260,6 +260,9 @@ def pcs_api_proxy(subpath):
 def dashboard_summary():
     """Get summary data for dashboard"""
     try:
+        def count_statuses(records, *statuses):
+            return len([record for record in records if record.get('status') in statuses])
+
         # Get data from all systems
         summary = {
             'erp': {},
@@ -276,9 +279,9 @@ def dashboard_summary():
                 orders = response.json()
                 summary['erp']['orders'] = {
                     'total': len(orders),
-                    'pending': len([o for o in orders if o['status'] == 'pending']),
-                    'in_progress': len([o for o in orders if o['status'] == 'in_progress']),
-                    'completed': len([o for o in orders if o['status'] == 'completed'])
+                    'pending': count_statuses(orders, 'draft', 'confirmed'),
+                    'in_progress': count_statuses(orders, 'in_production'),
+                    'completed': count_statuses(orders, 'completed')
                 }
             
             # Get materials
@@ -296,9 +299,9 @@ def dashboard_summary():
                 plans = response.json()
                 summary['erp']['production_plans'] = {
                     'total': len(plans),
-                    'pending': len([p for p in plans if p['status'] == 'pending']),
-                    'in_progress': len([p for p in plans if p['status'] == 'in_progress']),
-                    'completed': len([p for p in plans if p['status'] == 'completed'])
+                    'pending': count_statuses(plans, 'planned'),
+                    'in_progress': count_statuses(plans, 'in_progress'),
+                    'completed': count_statuses(plans, 'completed')
                 }
         except Exception as e:
             logger.error(f"Error getting ERP summary data: {str(e)}")
@@ -312,9 +315,9 @@ def dashboard_summary():
                 work_orders = response.json()
                 summary['mes']['work_orders'] = {
                     'total': len(work_orders),
-                    'pending': len([wo for wo in work_orders if wo['status'] == 'pending']),
-                    'in_progress': len([wo for wo in work_orders if wo['status'] == 'in_progress']),
-                    'completed': len([wo for wo in work_orders if wo['status'] == 'completed'])
+                    'pending': count_statuses(work_orders, 'planned', 'scheduled'),
+                    'in_progress': count_statuses(work_orders, 'in_progress'),
+                    'completed': count_statuses(work_orders, 'completed')
                 }
             
             # Get machines

@@ -455,6 +455,18 @@ class OrderService:
     VALID_ORDER_STATUSES = frozenset({
         'draft', 'confirmed', 'in_production', 'completed', 'cancelled'
     })
+    # Backward-compatibility aliases for older workflow clients.
+    ORDER_STATUS_ALIASES = {
+        'pending': 'draft',
+        'in_progress': 'in_production',
+    }
+
+    @staticmethod
+    def normalize_order_status(status):
+        """Map legacy order statuses to the canonical ERP enum."""
+        if status is None:
+            return 'draft'
+        return OrderService.ORDER_STATUS_ALIASES.get(status, status)
 
     @staticmethod
     def create_order(order_data):
@@ -466,7 +478,7 @@ class OrderService:
                 order_data['order_number'] = f"ORD-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
 
             # L4: validate status before hitting the database
-            incoming_status = order_data.get('status', 'draft')
+            incoming_status = OrderService.normalize_order_status(order_data.get('status', 'draft'))
             if incoming_status not in OrderService.VALID_ORDER_STATUSES:
                 raise ValueError(
                     f"Invalid order status '{incoming_status}'. "
@@ -531,6 +543,16 @@ class OrderService:
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
                 return None
+
+            if 'status' in order_data:
+                normalized_status = OrderService.normalize_order_status(order_data['status'])
+                if normalized_status not in OrderService.VALID_ORDER_STATUSES:
+                    raise ValueError(
+                        f"Invalid order status '{normalized_status}'. "
+                        f"Allowed values: {sorted(OrderService.VALID_ORDER_STATUSES)}"
+                    )
+                order_data = dict(order_data)
+                order_data['status'] = normalized_status
             
             # Update order fields
             for key, value in order_data.items():
@@ -640,6 +662,7 @@ class OrderService:
     @staticmethod
     def update_order_status(order_id, status):
         """Update order status"""
+        status = OrderService.normalize_order_status(status)
         # L4: validate status enum before touching the database
         if status not in OrderService.VALID_ORDER_STATUSES:
             raise ValueError(
