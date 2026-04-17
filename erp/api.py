@@ -10,8 +10,11 @@ from flask import Flask, request, jsonify,render_template, send_from_directory
 from flask_restful import Api, Resource
 from services import MaterialService, ProductService, OrderService, ProductionPlanService,MaterialTransactionService, BOMItem
 from shipping_services import ShipmentService
+from models import Base
+from database import engine
 
-
+# Ensure all model tables exist on startup (shipments, shipment_items, etc.)
+Base.metadata.create_all(engine)
 
 # Load configuration
 def load_config():

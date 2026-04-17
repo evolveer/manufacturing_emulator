@@ -12,6 +12,11 @@ from services import (
     MaterialTrackingService, ProductionCountService, DowntimeService,
     MaterialService, ProductionPlanService,
 )
+from models import Base
+from database import engine
+
+# Ensure all model tables exist (creates downtimes, product_name, etc. on fresh install)
+Base.metadata.create_all(engine)
 
 # Load configuration
 def load_config():

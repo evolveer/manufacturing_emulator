@@ -23,8 +23,8 @@ engine = create_engine(database_url)
 session_factory = sessionmaker(bind=engine)
 Session = scoped_session(session_factory)
 
-def _ensure_work_order_inventory_column():
-    """Add inventory_posted column to work_orders if it is missing (sqlite fallback)."""
+def _ensure_work_order_columns():
+    """Add missing columns to work_orders if they are missing (sqlite fallback migration)."""
     if engine.dialect.name != 'sqlite':
         return
     try:
@@ -33,12 +33,14 @@ def _ensure_work_order_inventory_column():
             col_names = {row[1] for row in cols}  # second column is name
             if 'inventory_posted' not in col_names:
                 conn.execute(text("ALTER TABLE work_orders ADD COLUMN inventory_posted BOOLEAN DEFAULT 0"))
+            if 'product_name' not in col_names:
+                conn.execute(text("ALTER TABLE work_orders ADD COLUMN product_name TEXT"))
     except SQLAlchemyError:
         # Don't crash startup if migration fails; errors will surface on query
         pass
 
 # Ensure compatibility migrations are applied on import
-_ensure_work_order_inventory_column()
+_ensure_work_order_columns()
 
 def get_db_session():
     """Get a database session"""

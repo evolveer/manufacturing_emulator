@@ -203,6 +203,7 @@ def init_mes_db():
         work_order_number TEXT UNIQUE NOT NULL,
         production_plan_id INTEGER NOT NULL,
         product_id INTEGER NOT NULL,
+        product_name TEXT,
         quantity INTEGER NOT NULL,
         status TEXT NOT NULL,
         start_time TIMESTAMP,
@@ -321,6 +322,22 @@ def init_mes_db():
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
+    # Create Downtimes table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS downtimes (
+        id INTEGER PRIMARY KEY,
+        machine_id INTEGER NOT NULL,
+        work_order_id INTEGER,
+        start_time TIMESTAMP NOT NULL,
+        end_time TIMESTAMP,
+        reason TEXT NOT NULL,
+        category TEXT NOT NULL,
+        notes TEXT,
+        FOREIGN KEY (machine_id) REFERENCES machines (id),
+        FOREIGN KEY (work_order_id) REFERENCES work_orders (id)
+    )
+    ''')
+
     conn.commit()
     conn.close()
     print("MES database initialized successfully.")
@@ -414,6 +431,20 @@ def init_pcs_db():
         (2, 'injection_speed', 60, 60, 10, 100, 'mm/s')
     ''')
     
+    # Create Cycle Data table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS cycle_data (
+        id INTEGER PRIMARY KEY,
+        machine_id INTEGER NOT NULL,
+        work_order_id INTEGER,
+        cycle_number INTEGER NOT NULL,
+        start_time TIMESTAMP NOT NULL,
+        end_time TIMESTAMP,
+        cycle_time REAL,
+        status TEXT
+    )
+    ''')
+
     conn.commit()
     conn.close()
     print("PCS database initialized successfully.")
