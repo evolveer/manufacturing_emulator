@@ -45,12 +45,14 @@ class MESClient(BaseClient):
         quantity: float,
         production_plan_id: int,
         machine_id: Optional[int] = None,
+        product_name: Optional[str] = None,
     ) -> Optional[Dict]:
         """Create a MES work order for a pharma batch."""
         payload = {
             "work_order_number": batch_id,
             "production_plan_id": production_plan_id,
             "product_id": product_id,
+            "product_name": product_name or batch_id,
             "quantity": int(quantity),
             "status": "planned",
         }
@@ -191,6 +193,28 @@ class MESClient(BaseClient):
         return data if status == 200 else None
 
     # ── Machines ─────────────────────────────────────────────────────────────
+    def create_machine(
+        self,
+        machine_code: str,
+        name: str,
+        machine_type: str = "pharma_batch",
+    ) -> Optional[Dict]:
+        """Create a new MES machine and return the full record (including DB 'id')."""
+        payload = {
+            "machine_code": machine_code,
+            "name": name,
+            "type": machine_type,
+        }
+        data, status = self._post("/machines", payload)
+        if status in (200, 201) and isinstance(data, dict) and "id" in data:
+            logger.info("MES machine created: code=%s id=%s", machine_code, data["id"])
+            return data
+        logger.warning(
+            "MES machine creation failed: code=%s status=%d data=%s",
+            machine_code, status, data,
+        )
+        return None
+
     def get_machines(self) -> List[Dict]:
         data, status = self._get("/machines")
         if status == 200 and isinstance(data, list):

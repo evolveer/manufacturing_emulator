@@ -62,6 +62,7 @@ class WorkOrderService:
                 work_order_number=work_order_data['work_order_number'],
                 production_plan_id=work_order_data['production_plan_id'],
                 product_id=work_order_data['product_id'],
+                product_name=work_order_data.get('product_name'),
                 quantity=work_order_data['quantity'],
                 status=work_order_data.get('status', 'planned'),
                 start_time=work_order_data.get('start_time'),

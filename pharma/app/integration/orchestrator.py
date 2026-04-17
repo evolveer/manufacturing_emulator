@@ -93,11 +93,11 @@ def on_batch_created(
 ) -> Dict[str, Any]:
     """
     Called when a pharma batch is instantiated.
-    1. Look up ERP product id.
-    2. Create MES production plan linked to ERP order.
-    3. Create MES work order for the batch.
-    4. Allocate materials in MES.
-    5. Assign first available machine (best-effort).
+    Correct 4-step MES/PCS integration flow:
+    1. Create a dedicated MES machine for this batch → get mes_machine_id (DB primary key).
+    2. Create MES work order linked to that machine → get mes_wo_id (DB primary key).
+    3. Register the PCS machine using the same mes_machine_id so cross-validation passes.
+    4. Start the PCS machine passing mes_wo_id as work_order_id.
     """
     results: Dict[str, Any] = {}
 
@@ -119,29 +119,47 @@ def on_batch_created(
     plan_id = mes_plan["id"] if mes_plan else 1  # fallback
     results["mes_plan"] = mes_plan
 
-    # Pick first available machine
-    available_machines = _mes.get_available_machines()
-    machine_id = available_machines[0]["id"] if available_machines else None
-    results["assigned_machine_id"] = machine_id
+    # Step 1 – Create a dedicated MES machine for this batch.
+    # The DB primary key returned here is used as the PCS machine_id so that
+    # PCS cross-validation (work_order.machine_id == pcs_machine_id) passes.
+    mes_machine = _mes.create_machine(
+        machine_code=f"PHARMA-{batch_id}",
+        name=f"Pharma Batch Machine {batch_id}",
+        machine_type="pharma_batch",
+    )
+    mes_machine_id: Optional[int] = mes_machine["id"] if mes_machine else None
+    results["mes_machine"] = mes_machine
+    results["mes_machine_id"] = mes_machine_id
 
-    # MES work order
+    # Step 2 – Create MES work order linked to the new machine.
     mes_wo = _mes.create_work_order(
         batch_id=batch_id,
         product_id=product_id,
+        product_name=product_name,
         quantity=quantity,
         production_plan_id=plan_id,
-        machine_id=machine_id,
+        machine_id=mes_machine_id,
     )
+    mes_wo_id: Optional[int] = mes_wo["id"] if mes_wo else None
     results["mes_work_order"] = mes_wo
+    results["mes_work_order_id"] = mes_wo_id
 
-    # Start machine if assigned
-    if machine_id:
-        pcs_machine_ids = [m.get("id") for m in _pcs.get_all_machines_status() if m.get("id")]
-        if pcs_machine_ids:
-            _pcs.start_machine(pcs_machine_ids[0])
-            results["pcs_machine_started"] = pcs_machine_ids[0]
+    # Steps 3 & 4 – Register PCS machine (same integer id) then start it.
+    if mes_machine_id and mes_wo_id:
+        _pcs.ensure_machine(mes_machine_id)
+        started = _pcs.start_machine(mes_machine_id, work_order_id=mes_wo_id)
+        results["pcs_machine_started"] = mes_machine_id if started else None
+    else:
+        logger.warning(
+            "on_batch_created: skipping PCS start – mes_machine_id=%s mes_wo_id=%s",
+            mes_machine_id, mes_wo_id,
+        )
+        results["pcs_machine_started"] = None
 
-    logger.info("on_batch_created: %s → MES WO=%s machine=%s", batch_id, mes_wo, machine_id)
+    logger.info(
+        "on_batch_created: %s → MES machine=%s WO=%s PCS started=%s",
+        batch_id, mes_machine_id, mes_wo_id, results.get("pcs_machine_started"),
+    )
     return results
 
 
@@ -232,26 +250,30 @@ def on_deviation_opened(
     return results
 
 
-# ── Batch Completed ────────────────────────────────────────────────────────
+## ── Batch Completed ──────────────────────────────────────────────────────
 def on_batch_completed(batch_id: str, product_code: str, quantity: float) -> Dict[str, Any]:
     """
     When a batch is completed:
     - Update MES work order to 'completed'.
-    - Stop the assigned machine (best-effort).
-    - Update ERP product stock.
+    - Stop the assigned PCS machine (best-effort).
+      The MES work order stores the machine_id that was used at creation time;
+      that same integer is the PCS machine_id (they were kept in sync by on_batch_created).
     """
     results: Dict[str, Any] = {}
 
     ok_mes = _mes.update_work_order_status(batch_id, "completed")
     results["mes_status_updated"] = ok_mes
 
-    # Stop PCS machine
-    pcs_machines = _pcs.get_all_machines_status()
-    if pcs_machines:
-        machine_id = pcs_machines[0].get("id")
-        if machine_id:
-            _pcs.stop_machine(machine_id)
-            results["pcs_machine_stopped"] = machine_id
+    # Stop PCS machine — the MES work order machine_id IS the PCS machine_id
+    mes_wo = _mes.get_work_order_by_number(batch_id)
+    pcs_machine_id = mes_wo.get("machine_id") if mes_wo else None
+    if pcs_machine_id:
+        stopped = _pcs.stop_machine(pcs_machine_id)
+        results["pcs_machine_stopped"] = pcs_machine_id if stopped else None
+        logger.info("on_batch_completed: %s → PCS machine %s stopped=%s", batch_id, pcs_machine_id, stopped)
+    else:
+        results["pcs_machine_stopped"] = None
+        logger.warning("on_batch_completed: no machine_id found for batch %s", batch_id)
 
     return results
 
@@ -287,13 +309,13 @@ def on_batch_released(
     return results
 
 
-# ── Batch Rejected ─────────────────────────────────────────────────────────
+## ── Batch Rejected ──────────────────────────────────────────────────────
 def on_batch_rejected(
     batch_id: str,
     reason: str,
     pharma_order_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Update MES work order to 'cancelled' and ERP order to 'cancelled'.
+    """Update MES work order to 'cancelled', stop PCS machine, and cancel ERP order.
 
     Note: MES valid statuses are planned/scheduled/in_progress/completed/cancelled.
     'on_hold' is not a valid MES status; 'cancelled' is the correct terminal state.
@@ -301,8 +323,19 @@ def on_batch_rejected(
     ok_mes = _mes.update_work_order_status(batch_id, "cancelled")
     erp_order_number = pharma_order_id or batch_id
     ok_erp = _erp.update_order_status(erp_order_number, "cancelled")
-    logger.info("on_batch_rejected: batch=%s order=%s reason=%s", batch_id, erp_order_number, reason)
-    return {"mes_cancelled": ok_mes, "erp_cancelled": ok_erp}
+
+    # Stop PCS machine — the MES work order machine_id IS the PCS machine_id
+    mes_wo = _mes.get_work_order_by_number(batch_id)
+    pcs_machine_id = mes_wo.get("machine_id") if mes_wo else None
+    pcs_stopped = False
+    if pcs_machine_id:
+        pcs_stopped = _pcs.stop_machine(pcs_machine_id)
+
+    logger.info(
+        "on_batch_rejected: batch=%s order=%s reason=%s pcs_machine=%s stopped=%s",
+        batch_id, erp_order_number, reason, pcs_machine_id, pcs_stopped,
+    )
+    return {"mes_cancelled": ok_mes, "erp_cancelled": ok_erp, "pcs_machine_stopped": pcs_machine_id if pcs_stopped else None}
 
 
 # ── Live Data Pulls ────────────────────────────────────────────────────────

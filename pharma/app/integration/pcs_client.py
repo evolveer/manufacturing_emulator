@@ -26,10 +26,38 @@ class PCSClient(BaseClient):
 
     # ── Machines ─────────────────────────────────────────────────────────────
     def get_all_machines_status(self) -> List[Dict]:
+        """Return list of machine status dicts.
+        PCS /machines/status returns a dict keyed by machine_id (e.g. {1: {...}, 2: {...}}).
+        We normalise it to a list and inject the 'id' key so callers can use m['id'].
+        """
         data, status = self._get("/machines/status")
-        if status == 200 and isinstance(data, list):
+        if status != 200 or not data:
+            return []
+        if isinstance(data, list):
             return data
+        if isinstance(data, dict):
+            result = []
+            for machine_id, info in data.items():
+                entry = dict(info) if isinstance(info, dict) else {}
+                entry.setdefault("id", int(machine_id))
+                result.append(entry)
+            return result
         return []
+
+    def ensure_machine(self, machine_id: int) -> bool:
+        """Create a PCS machine simulator entry if it doesn't already exist.
+        PCS machines are in-memory only and must be registered before start/stop/sensor calls.
+        """
+        # Check if already registered
+        existing = self.get_all_machines_status()
+        if any(int(m.get("id", -1)) == machine_id for m in existing):
+            return True  # already exists
+        data, status = self._post("/machines", {"machine_id": machine_id})
+        if status in (200, 201):
+            logger.info("PCS machine %d registered", machine_id)
+            return True
+        logger.warning("PCS machine registration failed: machine_id=%d status=%d", machine_id, status)
+        return False
 
     def get_machine_state(self, machine_id: int) -> Optional[Dict]:
         data, status = self._get(f"/machines/{machine_id}/state")
@@ -39,12 +67,19 @@ class PCSClient(BaseClient):
         data, status = self._get(f"/machines/{machine_id}/uptime")
         return data if status == 200 else None
 
-    def start_machine(self, machine_id: int) -> bool:
-        data, status = self._post(f"/machines/{machine_id}/start", {})
+    def start_machine(self, machine_id: int, work_order_id: Optional[int] = None) -> bool:
+        """Start a PCS machine. work_order_id is required by PCS and must match the MES work order."""
+        payload: Dict[str, Any] = {}
+        if work_order_id is not None:
+            payload["work_order_id"] = work_order_id
+        data, status = self._post(f"/machines/{machine_id}/start", payload)
         if status in (200, 201):
-            logger.info("PCS machine %d started", machine_id)
+            logger.info("PCS machine %d started (work_order_id=%s)", machine_id, work_order_id)
             return True
-        logger.warning("PCS machine start failed: machine_id=%d status=%d", machine_id, status)
+        logger.warning(
+            "PCS machine start failed: machine_id=%d work_order_id=%s status=%d data=%s",
+            machine_id, work_order_id, status, data,
+        )
         return False
 
     def stop_machine(self, machine_id: int) -> bool:

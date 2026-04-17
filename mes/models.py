@@ -17,6 +17,7 @@ class WorkOrder(Base):
     work_order_number = Column(String, unique=True, nullable=False)
     production_plan_id = Column(Integer, ForeignKey('production_plans.id'), nullable=False)
     product_id = Column(Integer, nullable=False)
+    product_name = Column(String, nullable=True)  # human-readable product name (e.g. from pharma batch)
     quantity = Column(Integer, nullable=False)
     status = Column(String, nullable=False)  # 'planned', 'scheduled', 'in_progress', 'completed', 'cancelled'
     start_time = Column(DateTime)
@@ -40,6 +41,7 @@ class WorkOrder(Base):
             'work_order_number': self.work_order_number,
             'production_plan_id': self.production_plan_id,
             'product_id': self.product_id,
+            'product_name': self.product_name,
             'quantity': self.quantity,
             'status': self.status,
             'start_time': self.start_time.isoformat() if self.start_time else None,
