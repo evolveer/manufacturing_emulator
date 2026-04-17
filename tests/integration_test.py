@@ -290,7 +290,7 @@ def test_erp_functionality():
             'quantity': 100,
             'due_date': (time.time() + 86400) * 1000,  # Tomorrow
             'priority': 1,
-            'status': 'pending'
+            'status': 'planned'
         }
         
         response = requests.post(f"{erp_url}/production-plans", json=plan_data)
@@ -596,7 +596,7 @@ def test_end_to_end_workflow():
             'quantity': 50,
             'due_date': (time.time() + 86400) * 1000,  # Tomorrow
             'priority': 1,
-            'status': 'pending'
+            'status': 'planned'
         }
         
         response = requests.post(f"{erp_url}/production-plans", json=plan_data)

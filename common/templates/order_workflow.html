@@ -435,7 +435,7 @@
                 customer_name: document.getElementById('customerName').value,
                 order_date: new Date().toISOString().split('T')[0],
                 delivery_date: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
-                status: 'pending',
+                status: 'draft',
                 items: [{
                     product_id: parseInt(document.getElementById('productId').value),
                     quantity: parseInt(document.getElementById('quantity').value)
@@ -557,7 +557,7 @@
                 production_plan_id: workflowState.planId,
                 product_id: parseInt(document.getElementById('productId').value),
                 quantity: parseInt(document.getElementById('quantity').value),
-                status: 'pending',
+                status: 'planned',
                 priority: 'normal',
                 scheduled_start: new Date().toISOString(),
                 scheduled_end: new Date(Date.now() + 7*24*60*60*1000).toISOString()
