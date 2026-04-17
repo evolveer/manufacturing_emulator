@@ -173,7 +173,9 @@
                             <td>${machineCell}</td>
                             <td>
                                 ${status === 'completed'
-                                    ? `<button class="btn btn-sm btn-success" onclick="putInStock(${workOrder.id}, ${workOrder.product_id}, ${workOrder.quantity})">Put in Stock</button>`
+                                    ? (workOrder.inventory_posted
+                                        ? `<span class="badge bg-success">In Stock</span>`
+                                        : `<button class="btn btn-sm btn-success" onclick="putInStock(${workOrder.id}, ${workOrder.product_id}, ${workOrder.quantity})">Put in Stock</button>`)
                                     : `<button class="btn btn-sm btn-primary" onclick="updateWorkOrderStatus(${workOrder.id}, '${nextStatus}', ${machineArg})" ${disabled ? 'disabled' : ''}>
                                         ${actionLabel}
                                        </button>`
@@ -232,8 +234,15 @@
                     method: 'POST'
                 });
                 const data = await resp.json().catch(() => ({}));
-                if (!resp.ok) throw new Error(data.error || 'Failed to post to stock');
-                alert(`Added ${quantity} of product ${productId} to ERP stock.`);
+                if (!resp.ok) {
+                    if (data.error && data.error.includes('already posted')) {
+                        alert(`Inventory already posted for this work order.`);
+                    } else {
+                        throw new Error(data.error || 'Failed to post to stock');
+                    }
+                } else {
+                    alert(`Added ${quantity} of product ${productId} to ERP stock.`);
+                }
                 await loadWorkOrders();
             } catch (err) {
                 alert(err.message);
@@ -333,12 +342,13 @@
                 html += '<tbody>';
                 
                 data.forEach(check => {
+                    const checkResult = check.status || check.result || '-';
                     let resultClass = '';
-                    if (check.result === 'pass') {
+                    if (checkResult === 'pass') {
                         resultClass = 'text-success';
-                    } else if (check.result === 'fail') {
+                    } else if (checkResult === 'fail') {
                         resultClass = 'text-danger';
-                    } else if (check.result === 'warning') {
+                    } else if (checkResult === 'warning') {
                         resultClass = 'text-warning';
                     }
                     
@@ -347,7 +357,7 @@
                         <td>${check.work_order_id}</td>
                         <td>${check.parameter}</td>
                         <td>${check.value} ${check.unit || ''}</td>
-                        <td class="${resultClass}">${check.result}</td>
+                        <td class="${resultClass}">${checkResult}</td>
                     </tr>`;
                 });
                 

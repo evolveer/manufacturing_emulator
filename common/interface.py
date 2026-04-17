@@ -326,9 +326,9 @@ def dashboard_summary():
                 machines = response.json()
                 summary['mes']['machines'] = {
                     'total': len(machines),
-                    'available': len([m for m in machines if m['status'] == 'available']),
-                    'running': len([m for m in machines if m['status'] == 'running']),
-                    'error': len([m for m in machines if m['status'] == 'error'])
+                    'available': len([m for m in machines if m['status'] == 'idle']),
+                    'running': len([m for m in machines if m['status'] in ('running', 'in_progress', 'busy')]),
+                    'error': len([m for m in machines if m['status'] in ('error', 'maintenance')])
                 }
             
             # Get quality checks
@@ -337,9 +337,9 @@ def dashboard_summary():
                 checks = response.json()
                 summary['mes']['quality_checks'] = {
                     'total': len(checks),
-                    'pass': len([c for c in checks if c['result'] == 'pass']),
-                    'fail': len([c for c in checks if c['result'] == 'fail']),
-                    'warning': len([c for c in checks if c['result'] == 'warning'])
+                    'pass': len([c for c in checks if c.get('status', c.get('result', '')) == 'pass']),
+                    'fail': len([c for c in checks if c.get('status', c.get('result', '')) == 'fail']),
+                    'warning': len([c for c in checks if c.get('status', c.get('result', '')) == 'warning'])
                 }
         except Exception as e:
             logger.error(f"Error getting MES summary data: {str(e)}")

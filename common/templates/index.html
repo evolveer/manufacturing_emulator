@@ -394,10 +394,12 @@
                         document.getElementById('activeWorkOrders').textContent = data.mes.work_orders.in_progress;
                     }
                     
-                    // Update machines metrics
+                    // Update machines metrics (total from MES, running from PCS)
                     if (data.mes && data.mes.machines) {
                         document.getElementById('totalMachines').textContent = data.mes.machines.total;
-                        document.getElementById('runningMachines').textContent = data.mes.machines.running;
+                    }
+                    if (data.pcs && data.pcs.machines) {
+                        document.getElementById('runningMachines').textContent = data.pcs.machines.running;
                     }
                     
                     // Update materials metrics
