@@ -165,6 +165,11 @@ def shipping_workflow():
     """Shipping workflow page"""
     return render_template('shipping_workflow.html')
 
+@app.route('/echotrace')
+def echotrace_dashboard():
+    """EchoTrace dashboard page"""
+    return render_template('echotrace_dashboard.html')
+
 # API routes
 @app.route('/api/status')
 def api_status():
