@@ -273,7 +273,7 @@
         }
 
         function loadCycles() {
-            fetch('/api/pcs/machines/1/cycles')
+            fetch('/api/pcs/machines/cycles/completed')
                 .then(r => r.json())
                 .then(data => {
                     const cyclesList = document.getElementById('cycles-list');

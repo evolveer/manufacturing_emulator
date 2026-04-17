@@ -7,13 +7,16 @@ import yaml
 from flask import Flask, request, jsonify
 from flask_restful import Api, Resource
 from services import (
-
-
     init_machine_manager, get_machine_manager,
     MachineParameterService, SensorDataService, AlarmService,
     MachineStateService, CycleDataService, MachineCommandService,
-    MachineService,MESClient,WorkOrderService
+    MachineService, MESClient, WorkOrderService
 )
+from models import Base
+from database import engine
+
+# Ensure all tables exist (including cycle_data)
+Base.metadata.create_all(engine)
 
 # Load configuration
 def load_config():
