@@ -389,11 +389,26 @@ def dashboard_production():
             'quality_summary': {}
         }
         
+        # Build ERP product id→name lookup
+        erp_products = {}
+        try:
+            resp = requests.get(f"{erp_url}/products", timeout=3)
+            if resp.status_code == 200:
+                for p in resp.json():
+                    erp_products[p['id']] = p['name']
+        except Exception:
+            pass
+
         # Get active work orders from MES
         try:
             response = requests.get(f"{mes_url}/work-orders/active")
             if response.status_code == 200:
-                production_data['work_orders'] = response.json()
+                raw_wos = response.json()
+                # Enrich product_name from ERP when MES doesn't have it
+                for wo in raw_wos:
+                    if not wo.get('product_name') and wo.get('product_id'):
+                        wo['product_name'] = erp_products.get(wo['product_id'])
+                production_data['work_orders'] = raw_wos
         except Exception as e:
             logger.error(f"Error getting active work orders: {str(e)}")
         

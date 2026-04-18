@@ -470,18 +470,24 @@
             let html = '';
             
             workOrders.forEach(workOrder => {
-                const counts = productionCounts[workOrder.id] || { total_count: 0, target_quantity: workOrder.quantity };
-                const progress = counts.target_quantity > 0 ? Math.round((counts.total_count / counts.target_quantity) * 100) : 0;
+                const counts = productionCounts[workOrder.id] || { total_count: 0, target_quantity: workOrder.quantity, completion_percentage: 0 };
+                // Use the MES completion_percentage but cap at 100% to avoid overflow bars
+                const rawPct = counts.completion_percentage || (counts.target_quantity > 0 ? (counts.total_count / counts.target_quantity) * 100 : 0);
+                const progress = Math.min(100, Math.round(rawPct));
+                const productLabel = workOrder.product_name || workOrder.work_order_number || 'Unknown';
+                const machineLabel = workOrder.machine_code || workOrder.machine_id || 'Not assigned';
+                const produced = counts.total_good !== undefined ? counts.total_good : counts.total_count;
+                const target = counts.target_quantity || workOrder.quantity;
                 
                 html += `
                     <tr>
                         <td>${workOrder.id}</td>
-                        <td>${workOrder.product_name || 'Unknown'}</td>
-                        <td>${counts.total_count} / ${counts.target_quantity}</td>
-                        <td>${workOrder.machine_id || 'Not assigned'}</td>
+                        <td>${productLabel}</td>
+                        <td>${produced} / ${target}</td>
+                        <td>${machineLabel}</td>
                         <td>
                             <div class="progress">
-                                <div class="progress-bar" role="progressbar" style="width: ${progress}%;" 
+                                <div class="progress-bar ${rawPct > 100 ? 'bg-warning' : ''}" role="progressbar" style="width: ${progress}%;" 
                                     aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100">${progress}%</div>
                             </div>
                         </td>

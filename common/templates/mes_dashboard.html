@@ -120,6 +120,12 @@
             return val ? parseInt(val) : null;
         }
 
+        // ERP product lookup cache
+        let erpProductsCache = {};
+        fetch('/api/erp/products').then(r => r.json()).then(products => {
+            products.forEach(p => { erpProductsCache[p.id] = p.name; });
+        }).catch(() => {});
+
         function loadWorkOrders() {
             fetch('/api/mes/work-orders')
                 .then(response => response.json())
@@ -165,12 +171,13 @@
 
                         const machineArg = workOrder.machine_id ? workOrder.machine_id : `getMachineSelection(${workOrder.id})`;
 
+                        const productLabel = workOrder.product_name || erpProductsCache[workOrder.product_id] || `Product #${workOrder.product_id}`;
                         html += `<tr>
                             <td>${workOrder.id}</td>
-                            <td>${workOrder.product_name || workOrder.product_id}</td>
+                            <td>${productLabel}</td>
                             <td>${workOrder.completed_quantity || 0} / ${workOrder.quantity}</td>
                             <td>${workOrder.status || '-'}</td>
-                            <td>${machineCell}</td>
+                            <td>${workOrder.machine_code ? workOrder.machine_code + ' (#' + workOrder.machine_id + ')' : machineCell}</td>
                             <td>
                                 ${status === 'completed'
                                     ? (workOrder.inventory_posted
