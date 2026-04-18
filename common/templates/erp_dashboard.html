@@ -339,40 +339,48 @@
         }
         
         function loadOrders() {
-            fetch('/api/erp/orders')
-                .then(response => response.json())
-                .then(data => {
-                    const ordersList = document.getElementById('orders-list');
-                    if (!Array.isArray(data) || data.length === 0) {
-                        ordersList.innerHTML = '<p>No orders found</p>';
-                        return;
-                    }
-                    
-                    let html = '<table class="table table-striped"><thead><tr>';
-                    html += '<th>ID</th><th>Order #</th><th>Customer</th><th>Status</th><th>Order Date</th><th>Actions</th>';
-                    html += '</tr></thead><tbody>';
-                    
-                    data.forEach(order => {
-                        const statusBadge = getStatusBadge(order.status);
-                        const orderDate = order.order_date ? new Date(order.order_date).toLocaleDateString() : '-';
-                        html += `<tr>
-                            <td>${order.id}</td>
-                            <td>${order.order_number}</td>
-                            <td>${order.customer_name}</td>
-                            <td>${statusBadge}</td>
-                            <td>${orderDate}</td>
-                            <td>
-                                <button class="btn btn-sm btn-info" onclick="viewOrderShipments(${order.id})">View Shipments</button>
-                            </td>
-                        </tr>`;
-                    });
-                    html += '</tbody></table>';
-                    ordersList.innerHTML = html;
-                })
-                .catch(error => {
-                    document.getElementById('orders-list').innerHTML = '<p>Error loading orders</p>';
-                    console.error('Error:', error);
+            Promise.all([
+                fetch('/api/erp/orders').then(r => r.json()),
+                fetch('/api/erp/shipments').then(r => r.json()).catch(() => [])
+            ])
+            .then(([orders, shipments]) => {
+                const ordersList = document.getElementById('orders-list');
+                if (!Array.isArray(orders) || orders.length === 0) {
+                    ordersList.innerHTML = '<p>No orders found</p>';
+                    return;
+                }
+
+                // Build a set of order IDs that already have at least one shipment
+                const ordersWithShipment = new Set(
+                    (Array.isArray(shipments) ? shipments : []).map(s => s.order_id)
+                );
+
+                let html = '<table class="table table-striped"><thead><tr>';
+                html += '<th>ID</th><th>Order #</th><th>Customer</th><th>Status</th><th>Order Date</th><th>Actions</th>';
+                html += '</tr></thead><tbody>';
+
+                orders.forEach(order => {
+                    const statusBadge = getStatusBadge(order.status);
+                    const orderDate = order.order_date ? new Date(order.order_date).toLocaleDateString() : '-';
+                    const actionBtn = ordersWithShipment.has(order.id)
+                        ? `<button class="btn btn-sm btn-info" onclick="viewOrderShipments(${order.id})">View Shipments</button>`
+                        : `<button class="btn btn-sm btn-success" onclick="openShipmentModalForOrder(${order.id})">Create Shipment</button>`;
+                    html += `<tr>
+                        <td>${order.id}</td>
+                        <td>${order.order_number}</td>
+                        <td>${order.customer_name}</td>
+                        <td>${statusBadge}</td>
+                        <td>${orderDate}</td>
+                        <td>${actionBtn}</td>
+                    </tr>`;
                 });
+                html += '</tbody></table>';
+                ordersList.innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('orders-list').innerHTML = '<p>Error loading orders</p>';
+                console.error('Error:', error);
+            });
         }
         
         function loadShipments() {
@@ -489,6 +497,50 @@
             shipmentModal.show();
         }
 
+        // Open the Create Shipment modal pre-filled for a specific order
+        function openShipmentModalForOrder(orderId) {
+            if (!shipmentModal) {
+                shipmentModal = new bootstrap.Modal(document.getElementById('shipmentModal'));
+            }
+            // Fetch the order details to pre-fill the modal
+            Promise.all([
+                fetch('/api/erp/orders').then(r => r.json()),
+                fetch('/api/erp/shipments').then(r => r.json()).catch(() => [])
+            ]).then(([orders, shipments]) => {
+                const select = document.getElementById('shipmentOrderSelect');
+                if (!select) return;
+                // Populate all orders (not just completed) so the target order is selectable
+                select.innerHTML = '';
+                (orders || []).forEach(order => {
+                    const item = order.items && order.items[0];
+                    const label = `${order.order_number || order.id} - ${item ? item.product_id + ' x' + item.quantity : 'No items'}`;
+                    const opt = document.createElement('option');
+                    opt.value = order.id;
+                    opt.textContent = label;
+                    opt.dataset.productId = item ? item.product_id : '';
+                    opt.dataset.quantity = item ? item.quantity : '';
+                    select.appendChild(opt);
+                });
+                // Pre-select the target order
+                select.value = orderId;
+                select.dispatchEvent(new Event('change'));
+            });
+            select_onchange_setup();
+            shipmentModal.show();
+        }
+
+        function select_onchange_setup() {
+            const select = document.getElementById('shipmentOrderSelect');
+            if (!select) return;
+            select.onchange = () => {
+                const opt = select.selectedOptions[0];
+                const prod = opt?.dataset?.productId || '';
+                const qty = opt?.dataset?.quantity || '';
+                document.getElementById('shipmentProduct').value = prod;
+                document.getElementById('shipmentQuantity').value = qty;
+            };
+        }
+
         function preloadShipmentOrders() {
             const select = document.getElementById('shipmentOrderSelect');
             if (!select) return;
@@ -560,6 +612,7 @@
                 }
                 alert(`Shipment ${data.shipment_number || data.id} created`);
                 loadShipments();
+                loadOrders(); // refresh so the button switches to 'View Shipments'
                 if (shipmentModal) shipmentModal.hide();
             })
             .catch(err => {
