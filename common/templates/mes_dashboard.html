@@ -107,6 +107,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadMachines(); // loads machine list and caches machines
             loadWorkOrders();
+            loadSchedule();
+            loadQualityChecks();
             document.getElementById('hideCompletedToggle').addEventListener('change', (e) => {
                 hideCompleted = e.target.checked;
                 loadWorkOrders();
@@ -292,7 +294,7 @@
                 });
         }
             
-        // Fetch schedule
+        function loadSchedule() {
         fetch('/api/mes/schedule')
             .then(response => response.json())
             .then(data => {
@@ -333,7 +335,9 @@
                 document.getElementById('schedule-list').innerHTML = '<p>Error loading schedule</p>';
                 console.error('Error:', error);
             });
+        }
             
+        function loadQualityChecks() {
         // Fetch quality checks
         fetch('/api/mes/quality-checks')
             .then(response => response.json())
@@ -375,6 +379,7 @@
                 document.getElementById('quality-list').innerHTML = '<p>Error loading quality checks</p>';
                 console.error('Error:', error);
             });
+        }
     </script>
 </body>
 </html>

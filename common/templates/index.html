@@ -651,13 +651,14 @@
             }
         });
 
-        // Initial updates
-        updateSystemStatus();
-        updateDashboardData();
-
-        // Set up periodic updates
-        setInterval(updateSystemStatus, 10000);
-        setInterval(updateDashboardData, 15000);
+         // Initial updates — wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', () => {
+            updateSystemStatus();
+            updateDashboardData();
+            // Set up periodic updates
+            setInterval(updateSystemStatus, 10000);
+            setInterval(updateDashboardData, 15000);
+        });
     </script>
 </body>
 </html>
