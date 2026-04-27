@@ -3,6 +3,7 @@ Shipping Services for ERP System
 Handles shipment creation, status updates, and inventory management
 """
 import datetime
+import os
 from sqlalchemy.exc import SQLAlchemyError
 from database import get_db_session, close_db_session
 from shipping_models import Shipment, ShipmentItem
@@ -10,8 +11,10 @@ from models import Order, Product
 from services import ProductService
 from echotrace.integration import log_audit_trail
 
-AUDIT_USER_ID = 0
-AUDIT_USERNAME = "system"
+# Audit identity – read from environment so deployments can set a meaningful
+# service-account name without changing code (fixes issue #14)
+AUDIT_USER_ID = int(os.environ.get('AUDIT_USER_ID', '0'))
+AUDIT_USERNAME = os.environ.get('AUDIT_USERNAME', 'erp-service')
 
 
 class ShipmentService:
@@ -167,22 +170,26 @@ class ShipmentService:
     
     @staticmethod
     def _deduct_inventory_for_shipment(session, shipment):
-        """Deduct product inventory when shipment is shipped"""
+        """Deduct product inventory when shipment is shipped.
+
+        Fixes issue #10: previously stock was deducted twice – once directly
+        on the ORM object inside the caller’s session, and again via
+        ProductService.update_product_stock() which opens its own session and
+        commits independently.  Now a single deduction is performed inside the
+        caller’s transaction so the change is committed atomically with the
+        shipment status update.
+        """
+        import logging as _logging
+        _logger = _logging.getLogger('erp.shipping_services')
         for item in shipment.items:
             product = session.query(Product).filter(Product.id == item.product_id).first()
             if product:
-                # Deduct from stock
+                # Single deduction inside the caller’s transaction (fixes issue #10)
                 product.stock_quantity -= item.quantity
-                
-                # Create transaction record (using ProductService method if available)
-                try:
-                    ProductService.update_product_stock(
-                        item.product_id,
-                        -item.quantity,
-                        transaction_type='shipment'
-                    )
-                except Exception as e:
-                    print(f"Warning: Could not create transaction record: {e}")
+                _logger.info(
+                    "Deducted %s units of product %s for shipment %s",
+                    item.quantity, item.product_id, shipment.id
+                )
     
     @staticmethod
     def simulate_shipment_lifecycle(shipment_id, timeframe_minutes=None):

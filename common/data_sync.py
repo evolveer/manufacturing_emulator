@@ -35,9 +35,14 @@ class DataSynchronizer:
     def __init__(self, config):
         """Initialize the data synchronizer"""
         self.config = config
-        self.erp_url = f"http://{config['erp']['host']}:{config['erp']['port']}/api/{config['erp']['api_version']}"
-        self.mes_url = f"http://{config['mes']['host']}:{config['mes']['port']}/api/{config['mes']['api_version']}"
-        self.pcs_url = f"http://{config['pcs']['host']}:{config['pcs']['port']}/api/{config['pcs']['api_version']}"
+        # Fixes issue #3: services bind on 0.0.0.0 but outbound HTTP calls must
+        # use localhost (or a configured hostname), not the wildcard bind address.
+        def _client_host(h: str) -> str:
+            return 'localhost' if h in ('0.0.0.0', '') else h
+
+        self.erp_url = f"http://{_client_host(config['erp']['host'])}:{config['erp']['port']}/api/{config['erp']['api_version']}"
+        self.mes_url = f"http://{_client_host(config['mes']['host'])}:{config['mes']['port']}/api/{config['mes']['api_version']}"
+        self.pcs_url = f"http://{_client_host(config['pcs']['host'])}:{config['pcs']['port']}/api/{config['pcs']['api_version']}"
         
         # Synchronization intervals (in seconds)
         self.sync_intervals = config['sync']['intervals']

@@ -5,10 +5,11 @@ Provides business logic for the PCS emulator
 import datetime
 import json
 import logging
+import os
 import requests
 from sqlalchemy.exc import SQLAlchemyError
 from database import get_db_session, close_db_session
-from models import MachineParameter, SensorData, Alarm, MachineState, CycleData, MachineCommand,WorkOrder
+from models import MachineParameter, SensorData, Alarm, MachineState, CycleData, MachineCommand, WorkOrder
 from machine_simulator import MachineSimulatorManager
 
 logger = logging.getLogger('pcs_emulator.services')
@@ -16,11 +17,18 @@ logger = logging.getLogger('pcs_emulator.services')
 # Global machine simulator manager
 machine_manager = None
 
+# MES URL – read from environment or fall back to config default (fixes issue #2)
+_MES_URL = os.environ.get('MES_URL', 'http://localhost:5002/api/v1').rstrip('/')
+
 def init_machine_manager(config):
     """Initialize the machine simulator manager"""
-    global machine_manager
+    global machine_manager, _MES_URL
     if machine_manager is None:
         machine_manager = MachineSimulatorManager(config)
+    # Allow config to override MES URL if env var not set
+    if not os.environ.get('MES_URL'):
+        _mes_cfg = config.get('pcs', {}).get('mes_connection', {})
+        _MES_URL = _mes_cfg.get('url', _MES_URL).rstrip('/')
     return machine_manager
 
 def get_machine_manager():
@@ -522,7 +530,7 @@ class MESClient:
     @staticmethod
     def get_work_order(work_order_id):
         try:
-            response = requests.get(f"http://localhost:5002/api/v1/work-orders/{work_order_id}")
+            response = requests.get(f"{_MES_URL}/work-orders/{work_order_id}")
             if response.status_code == 200:
                 return response.json()
             else:
@@ -841,7 +849,7 @@ class MachineService:
     @staticmethod
     def start_machine(machine_id, work_order_id=None):
         """Start a machine"""
-        print("🔧 Starting machine", machine_id, "with work order", work_order_id)
+        logger.info("Starting machine %s with work order %s", machine_id, work_order_id)
         return MachineCommandService.create_command(
             machine_id, 
             'start', 

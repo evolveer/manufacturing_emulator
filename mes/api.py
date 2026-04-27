@@ -3,10 +3,13 @@ MES Emulator - API Endpoints
 Provides REST API endpoints for the MES emulator
 """
 import os
+import sys
+import logging
 import yaml
 import requests
 from flask import Flask, request, jsonify
 from flask_restful import Api, Resource
+from dotenv import load_dotenv
 from services import (
     WorkOrderService, MachineService, SchedulingService, QualityService,
     MaterialTrackingService, ProductionCountService, DowntimeService,
@@ -14,6 +17,18 @@ from services import (
 )
 from models import Base
 from database import engine
+
+# Load environment variables from project root .env
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_project_root, '.env'))
+
+# Import shared auth utilities
+sys.path.insert(0, os.path.join(_project_root, 'common'))
+from auth import get_cors_origins  # noqa: E402
+
+# Configure structured logging (fixes issue #12)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('mes')
 
 # Ensure all model tables exist (creates downtimes, product_name, etc. on fresh install)
 Base.metadata.create_all(engine)
@@ -29,11 +44,15 @@ config = load_config()
 # Create Flask app
 app = Flask(__name__)
 
-# CORS configuration
+# CORS configuration – restrict to configured origins (fixes issue #5)
+_allowed_origins = get_cors_origins()
+
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    origin = request.headers.get('Origin', '')
+    if origin in _allowed_origins or '*' in _allowed_origins:
+        response.headers.set('Access-Control-Allow-Origin', origin or _allowed_origins[0])
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-API-Key')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
     return response
 
@@ -186,7 +205,7 @@ class WorkOrderStatusAPI(Resource):
                                 json={'status': 'completed'}
                             )
                         except Exception as plan_err:
-                            print(f"Failed to update production plan {production_plan_id} status: {plan_err}")
+                            logger.warning("Failed to update production plan %s status: %s", production_plan_id, plan_err)
                     # Mark ERP order as completed/ready
                     if existing.get('order_id'):
                         try:
@@ -195,10 +214,10 @@ class WorkOrderStatusAPI(Resource):
                                 json={'status': 'completed'}
                             )
                         except Exception as order_err:
-                            print(f"Failed to update ERP order {existing.get('order_id')} status: {order_err}")
+                            logger.warning("Failed to update ERP order %s status: %s", existing.get('order_id'), order_err)
                 except Exception as e:
                     # Log but don't fail the status update
-                    print(f"Material consumption error for WO {work_order_id}: {e}")
+                    logger.warning("Material consumption error for WO %s: %s", work_order_id, e)
             
             return work_order
         except Exception as e:
@@ -231,7 +250,7 @@ class WorkOrderStockInAPI(Resource):
                 allocations = MaterialTrackingService.allocate_materials_for_work_order(work_order_id, ERP_API_URL)
                 MaterialTrackingService.consume_materials_for_work_order(work_order_id, ERP_API_URL)
             except Exception as e:
-                print(f"Material consumption error on stock-in for WO {work_order_id}: {e}")
+                logger.warning("Material consumption error on stock-in for WO %s: %s", work_order_id, e)
 
             resp = requests.put(
                 f"{ERP_API_URL}/products/{product_id}/stock",
@@ -251,7 +270,7 @@ class WorkOrderStockInAPI(Resource):
                         json={'status': 'completed'}
                     )
                 except Exception as plan_err:
-                    print(f"Failed to update production plan {production_plan_id} status: {plan_err}")
+                    logger.warning("Failed to update production plan %s status: %s", production_plan_id, plan_err)
             if order_id:
                 try:
                     requests.put(
@@ -259,7 +278,7 @@ class WorkOrderStockInAPI(Resource):
                         json={'status': 'completed'}
                     )
                 except Exception as order_err:
-                    print(f"Failed to update ERP order {order_id} status: {order_err}")
+                    logger.warning("Failed to update ERP order %s status: %s", order_id, order_err)
             return {'message': 'Stock updated in ERP', 'product_id': product_id, 'quantity': quantity}, 200
         except Exception as e:
             return {'error': str(e)}, 500

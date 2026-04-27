@@ -4,6 +4,7 @@ Provides business logic for the ERP emulator
 """
 from datetime import datetime
 import logging
+import os
 import uuid
 from sqlalchemy.exc import SQLAlchemyError
 from database import get_db_session, close_db_session
@@ -11,8 +12,11 @@ from models import Material, Product, BOMItem, Order, OrderItem, ProductionPlan,
 from echotrace.integration import log_audit_trail
 
 logger = logging.getLogger(__name__)
-AUDIT_USER_ID = 0
-AUDIT_USERNAME = "system"
+
+# Audit identity – read from environment so deployments can set a meaningful
+# service-account name without changing code (fixes issue #14)
+AUDIT_USER_ID = int(os.environ.get('AUDIT_USER_ID', '0'))
+AUDIT_USERNAME = os.environ.get('AUDIT_USERNAME', 'erp-service')
 
 class MaterialService:
     """Service for material management"""
@@ -410,9 +414,9 @@ class ProductService:
                     'material_id': entry.material_id,
                     'quantity': entry.quantity
                 })
-            return jsonify(result), 200
+            return result
         except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            raise RuntimeError(f"Failed to retrieve BOM entries: {e}") from e
         finally:
             close_db_session(session)
 

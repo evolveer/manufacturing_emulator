@@ -105,7 +105,14 @@ def on_batch_created(
     erp_product = _erp.get_product_by_code(product_code)
     if not erp_product:
         erp_product = _erp.ensure_product(product_code, product_name)
-    product_id = erp_product["id"] if erp_product else 1  # fallback
+    # Fixes issue #11: raise an explicit error instead of silently falling back
+    # to ID=1, which would silently corrupt data by linking to the wrong record.
+    if not erp_product:
+        raise ValueError(
+            f"Cannot start batch {batch_id}: ERP product '{product_code}' could not be "
+            "found or created. Aborting integration."
+        )
+    product_id = erp_product["id"]
 
     # ERP order id
     erp_order = _erp.get_order_by_number(pharma_order_id)
@@ -116,7 +123,11 @@ def on_batch_created(
         plan_number=f"PP-{batch_id}",
         order_id=erp_order_id,
     )
-    plan_id = mes_plan["id"] if mes_plan else 1  # fallback
+    if not mes_plan:
+        raise ValueError(
+            f"Cannot start batch {batch_id}: MES production plan 'PP-{batch_id}' could not be created."
+        )
+    plan_id = mes_plan["id"]
     results["mes_plan"] = mes_plan
 
     # Step 1 – Create a dedicated MES machine for this batch.

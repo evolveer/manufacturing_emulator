@@ -2,16 +2,27 @@
 ERP Emulator - API Endpoints
 Provides REST API endpoints for the ERP emulator
 """
+import logging
 import os
+import sys
 import yaml
 import threading
 import time
-from flask import Flask, request, jsonify,render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_restful import Api, Resource
-from services import MaterialService, ProductService, OrderService, ProductionPlanService,MaterialTransactionService, BOMItem
+from dotenv import load_dotenv
+from services import MaterialService, ProductService, OrderService, ProductionPlanService, MaterialTransactionService, BOMItem
 from shipping_services import ShipmentService
 from models import Base
 from database import engine
+
+# Load environment variables from project root .env
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_project_root, '.env'))
+
+# Import shared auth utilities
+sys.path.insert(0, os.path.join(_project_root, 'common'))
+from auth import get_cors_origins  # noqa: E402
 
 # Ensure all model tables exist on startup (shipments, shipment_items, etc.)
 Base.metadata.create_all(engine)
@@ -29,11 +40,15 @@ config = load_config()
 # Create Flask app
 app = Flask(__name__)
 
-# CORS configuration
+# CORS configuration – restrict to configured origins (fixes issue #5)
+_allowed_origins = get_cors_origins()
+
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    origin = request.headers.get('Origin', '')
+    if origin in _allowed_origins or '*' in _allowed_origins:
+        response.headers.set('Access-Control-Allow-Origin', origin or _allowed_origins[0])
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-API-Key')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
     return response
 
@@ -563,7 +578,7 @@ class ProductionPlanUpdateCountsAPI(Resource):
     def put(self, plan_id):
         data = request.get_json()
         # You'll need to implement: find the plan, match the work order, update counts.
-        print(f"Received counts update for plan {plan_id}: {data}")
+        logging.getLogger('erp').info("Received counts update for plan %s: %s", plan_id, data)
         return {"message": "Counts updated"}, 200
 
 
@@ -638,18 +653,17 @@ class ShipmentStatusAPI(Resource):
 
 class ShipmentSimulateAPI(Resource):
     def post(self, shipment_id):
-        """Simulate shipment lifecycle asynchronously"""
+        """Simulate shipment lifecycle asynchronously (fixes issue #9 – runs in background thread)"""
         try:
             data = request.get_json() or {}
             timeframes = data.get('timeframe_minutes')
-
+            _logger = logging.getLogger('erp.shipment_simulate')
             def runner():
                 try:
                     for _ in ShipmentService.simulate_shipment_lifecycle(shipment_id, timeframes):
                         pass
                 except Exception as e:
-                    print(f"Shipment simulation error: {e}")
-
+                    _logger.error("Shipment simulation error for shipment %s: %s", shipment_id, e)
             threading.Thread(target=runner, daemon=True).start()
             return {'message': 'Simulation started'}, 202
         except Exception as e:

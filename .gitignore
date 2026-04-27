@@ -193,3 +193,6 @@ logs/mes.log
 logs/pcs.log
 pcs/pcs.log
 *.pid
+
+# Environment variables
+.env

@@ -46,7 +46,10 @@ class InjectionMoldingMachine:
         self.machine_id = machine_id
         self.config = config
         self.machine_config = config['machine']
-        
+        # MES URL from config (fixes issue #2 – no more hardcoded localhost)
+        _mes_cfg = config.get('mes_connection', {})
+        self._mes_url = _mes_cfg.get('url', 'http://localhost:5002/api/v1').rstrip('/')
+
         # Machine state
         self.running = False
         self.current_phase = 'idle'
@@ -224,7 +227,7 @@ class InjectionMoldingMachine:
         }
     def _get_work_order_target(self, work_order_id):
         try:
-            response = requests.get(f"http://localhost:5002/api/v1/work-orders/{work_order_id}")
+            response = requests.get(f"{self._mes_url}/work-orders/{work_order_id}")
             if response.status_code == 200:
                 return response.json().get("quantity")
         except Exception as e:
@@ -625,7 +628,7 @@ class InjectionMoldingMachine:
     def _notify_cycle_completed(self, work_order_id):
         try:
             response = requests.post(
-                f"http://localhost:5002/api/v1/work-orders/{work_order_id}/increment-count",
+                f"{self._mes_url}/work-orders/{work_order_id}/increment-count",
                 json={
                     'good': 1,     # assume 1 good part per cycle for now
                     'reject': 0,
@@ -642,7 +645,7 @@ class InjectionMoldingMachine:
     def _get_current_production_summary(self):
         """Fetch the current production summary from MES"""
         try:
-            response = requests.get(f"http://localhost:5002/api/v1/work-orders/{self.current_work_order_id}/production-summary")
+            response = requests.get(f"{self._mes_url}/work-orders/{self.current_work_order_id}/production-summary")
             if response.status_code == 200:
                 return response.json()
             else:

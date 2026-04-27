@@ -3,9 +3,19 @@ PCS Emulator - API Endpoints
 Provides REST API endpoints for the PCS emulator
 """
 import os
+import sys
 import yaml
 from flask import Flask, request, jsonify
 from flask_restful import Api, Resource
+from dotenv import load_dotenv
+
+# Load environment variables from project root .env
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_project_root, '.env'))
+
+# Import shared auth utilities
+sys.path.insert(0, os.path.join(_project_root, 'common'))
+from auth import require_api_key, get_cors_origins  # noqa: E402
 from services import (
     init_machine_manager, get_machine_manager,
     MachineParameterService, SensorDataService, AlarmService,
@@ -29,11 +39,15 @@ config = load_config()
 # Create Flask app
 app = Flask(__name__)
 
-# CORS configuration
+# CORS configuration – restrict to configured origins (fixes issue #5)
+_allowed_origins = get_cors_origins()
+
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    origin = request.headers.get('Origin', '')
+    if origin in _allowed_origins or '*' in _allowed_origins:
+        response.headers.set('Access-Control-Allow-Origin', origin or _allowed_origins[0])
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-API-Key')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
     return response
 
@@ -43,8 +57,13 @@ api = Api(app)
 api_version = config['pcs']['api_version']
 API_PREFIX = f"/api/{api_version}"
 
-# Initialize machine simulator manager
-init_machine_manager(config)
+# Initialize machine simulator manager (fixes issue #13 – deferred from module-level
+# so that importing this module in tests does not spin up background threads)
+def _bootstrap():
+    """Run once at server startup to initialise the machine simulator manager."""
+    init_machine_manager(config)
+
+_bootstrap()
 
 # Error handling
 @app.errorhandler(404)
@@ -63,14 +82,15 @@ def server_error(error):
 def status():
     return {'status': 'ok', 'service': 'PCS'}, 200
 
-# Register work order
+# Register work order – persisted to DB via WorkOrderService (fixes issue #15)
 @app.route('/api/v1/work-orders', methods=['POST'])
 def register_work_order():
-    data = request.get_json()
-    PCSWorkOrderStore.add(data)
-    return {"message": "Work order registered"}, 201
+    data = request.get_json() or {}
+    result, status_code = WorkOrderService.register_work_order(data)
+    return result, status_code
 
 @app.route('/api/v1/alarms/<int:alarm_id>/acknowledge', methods=['POST'])
+@require_api_key  # fixes issue #6 – control endpoint requires API key
 def acknowledge_alarm(alarm_id):
     alarm = AlarmService.acknowledge_alarm(alarm_id)
     if alarm:
@@ -78,6 +98,7 @@ def acknowledge_alarm(alarm_id):
     return {'error': 'Alarm not found'}, 404
 
 @app.route('/api/v1/alarms/<int:alarm_id>/resolve', methods=['POST'])
+@require_api_key  # fixes issue #6 – control endpoint requires API key
 def resolve_alarm(alarm_id):
     alarm = AlarmService.resolve_alarm(alarm_id)
     if alarm:
@@ -473,24 +494,11 @@ class WorkOrderAPI(Resource):
         return result, status_code
 
 
-class PCSWorkOrderStore:
-    work_orders = []
+# PCSWorkOrderStore removed – work orders are now persisted to the database
+# via WorkOrderService.register_work_order() (fixes issue #15)
 
-    @staticmethod
-    def add(data):
-        """Add work order to the store."""
-        work_order = {
-            "id": len(PCSWorkOrderStore.work_orders) + 1,
-            "work_order_number": data.get("work_order_number"),
-            "production_plan_id": data.get("production_plan_id"),
-            "product_id": data.get("product_id"),
-            "quantity": data.get("quantity"),
-            "status": data.get("status"),
-        }
-        PCSWorkOrderStore.work_orders.append(work_order)
-        return work_order
-    
 class StartMachineAPI(Resource):
+    @require_api_key  # fixes issue #6 – machine control requires API key
     def post(self, machine_id):
         """Start a machine"""
         try:
@@ -506,6 +514,7 @@ class StartMachineAPI(Resource):
             return {'error': str(e)}, 500
 
 class StopMachineAPI(Resource):
+    @require_api_key  # fixes issue #6 – machine control requires API key
     def post(self, machine_id):
         """Stop a machine"""
         try:
@@ -518,6 +527,7 @@ class StopMachineAPI(Resource):
             return {'error': str(e)}, 500
 
 class SetMachineParameterAPI(Resource):
+    @require_api_key  # fixes issue #6 – machine control requires API key
     def post(self, machine_id):
         """Set a machine parameter"""
         try:

@@ -1,0 +1,54 @@
+Total issues: 53
+- #54: Architecture: In-Memory State in PCS API
+- #53: Security: Hardcoded System User in Audit Logs
+- #52: Architecture: Startup Side Effects in API Modules
+- #51: Code Quality: Print Statements Used for Logging
+- #50: Architecture: Fallback IDs in Pharma Orchestrator
+- #49: Code Quality: Mixed Transaction Boundaries in Inventory Deduction
+- #48: Code Quality: Blocking Sleep in Shipment Simulation
+- #47: Code Quality: jsonify Used in Service Layer
+- #46: Security: Debug Mode Enabled in EchoTrace API
+- #45: Security: Unauthenticated Audit and Control Endpoints
+- #44: Security: Open CORS Policy Across All Services
+- #43: Architecture: EchoTrace Integration Bypasses Microservice
+- #42: Architecture: In-Memory State in PCS API
+- #41: Security: Hardcoded System User in Audit Logs
+- #40: Architecture: Startup Side Effects in API Modules
+- #39: Code Quality: Print Statements Used for Logging
+- #38: Architecture: Fallback IDs in Pharma Orchestrator
+- #37: Code Quality: Mixed Transaction Boundaries in Inventory Deduction
+- #36: Code Quality: Blocking Sleep in Shipment Simulation
+- #35: Code Quality: jsonify Used in Service Layer
+- #34: Security: Debug Mode Enabled in EchoTrace API
+- #33: Security: Unauthenticated Audit and Control Endpoints
+- #32: Security: Open CORS Policy Across All Services
+- #31: Architecture: EchoTrace Integration Bypasses Microservice
+- #30: Architecture: DataSync Thread Lifecycle and Coupling
+- #29: Architecture: In-Memory State in PCS API
+- #28: Security: Hardcoded System User in Audit Logs
+- #27: Architecture: Startup Side Effects in API Modules
+- #26: Code Quality: Print Statements Used for Logging
+- #25: Architecture: Fallback IDs in Pharma Orchestrator
+- #24: Code Quality: Mixed Transaction Boundaries in Inventory Deduction
+- #23: Code Quality: Blocking Sleep in Shipment Simulation
+- #22: Code Quality: jsonify Used in Service Layer
+- #21: Security: Debug Mode Enabled in EchoTrace API
+- #20: Security: Unauthenticated Audit and Control Endpoints
+- #19: Security: Open CORS Policy Across All Services
+- #18: Architecture: EchoTrace Integration Bypasses Microservice
+- #17: Architecture: DataSync Thread Lifecycle and Coupling
+- #16: Architecture: Hardcoded Localhost URLs in Microservices
+- #15: Architecture: In-Memory State in PCS API
+- #14: Security: Hardcoded System User in Audit Logs
+- #13: Architecture: Startup Side Effects in API Modules
+- #12: Code Quality: Print Statements Used for Logging
+- #11: Architecture: Fallback IDs in Pharma Orchestrator
+- #10: Code Quality: Mixed Transaction Boundaries in Inventory Deduction
+- #9: Code Quality: Blocking Sleep in Shipment Simulation
+- #8: Code Quality: jsonify Used in Service Layer
+- #7: Security: Debug Mode Enabled in EchoTrace API
+- #6: Security: Unauthenticated Audit and Control Endpoints
+- #5: Security: Open CORS Policy Across All Services
+- #4: Architecture: EchoTrace Integration Bypasses Microservice
+- #3: Architecture: DataSync Thread Lifecycle and Coupling
+- #2: Architecture: Hardcoded Localhost URLs in Microservices

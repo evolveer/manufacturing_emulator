@@ -1,85 +1,43 @@
 """
-echotrace.integration — local shim for log_audit_trail.
+echotrace.integration — HTTP client shim for log_audit_trail.
 
-Writes audit records to <repo_root>/echotrace/audit.db using SQLAlchemy.
-The function signature matches every call site in the manufacturing emulator:
+Sends audit records to the EchoTrace microservice via its REST API
+(POST /api/v1/audit-trail) instead of writing directly to the database.
 
-    log_audit_trail(
-        user_id, username, action, entity_type, entity_id,
-        source_system, entity_name,
-        old_value=None, new_value=None, changes=None
-    )
+This fixes issue #4: the previous implementation bypassed the EchoTrace
+microservice by writing directly to audit.db using its own SQLAlchemy
+engine, violating service isolation.
 
-All arguments are keyword-safe.  Extra kwargs are silently ignored so
-future call sites with additional fields don't break.
+The function signature is backward-compatible with every existing call site.
+Extra kwargs are silently absorbed so future call sites with additional
+fields do not break.
 """
 import json
 import logging
 import os
-import datetime
 from pathlib import Path
+from dotenv import load_dotenv
 
-from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, create_engine, text
-)
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+# Load .env from project root
+_project_root = Path(__file__).parent.parent
+load_dotenv(_project_root / '.env')
 
 logger = logging.getLogger("echotrace")
 
+
 # ---------------------------------------------------------------------------
-# Database setup — single shared audit.db in the echotrace/ directory
+# Configuration
 # ---------------------------------------------------------------------------
-_HERE = Path(__file__).parent
-_DB_PATH = _HERE / "audit.db"
-_DB_URL = f"sqlite:///{_DB_PATH}"
 
-Base = declarative_base()
-
-
-class AuditLog(Base):
-    """Immutable audit-trail record."""
-    __tablename__ = "audit_log"
-
-    id            = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp     = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    user_id       = Column(Integer, nullable=True)
-    username      = Column(String(120), nullable=True)
-    action        = Column(String(50), nullable=False)       # CREATE / UPDATE / DELETE
-    entity_type   = Column(String(100), nullable=False)
-    entity_id     = Column(Integer, nullable=True)
-    entity_name   = Column(String(255), nullable=True)
-    source_system = Column(String(50), nullable=True)
-    old_value     = Column(Text, nullable=True)
-    new_value     = Column(Text, nullable=True)
-    changes       = Column(Text, nullable=True)
-
-    def to_dict(self):
-        return {
-            "id":            self.id,
-            "timestamp":     self.timestamp.isoformat() if self.timestamp else None,
-            "user_id":       self.user_id,
-            "username":      self.username,
-            "action":        self.action,
-            "entity_type":   self.entity_type,
-            "entity_id":     self.entity_id,
-            "entity_name":   self.entity_name,
-            "source_system": self.source_system,
-            "old_value":     json.loads(self.old_value)  if self.old_value  else None,
-            "new_value":     json.loads(self.new_value)  if self.new_value  else None,
-            "changes":       json.loads(self.changes)    if self.changes    else None,
-        }
+def _get_echotrace_url() -> str:
+    """Return the EchoTrace API base URL from environment or config."""
+    url = os.environ.get('ECHOTRACE_URL', 'http://localhost:5004')
+    return url.rstrip('/')
 
 
-# Create engine once at module load time
-_engine = create_engine(_DB_URL, connect_args={"check_same_thread": False})
-
-# Enable WAL mode for SQLite so concurrent readers/writers don't block each other
-with _engine.connect() as _conn:
-    _conn.execute(text("PRAGMA journal_mode=WAL"))
-
-Base.metadata.create_all(_engine)
-_Session = sessionmaker(bind=_engine)
+def _get_api_key() -> str:
+    """Return the internal API key for authenticated requests."""
+    return os.environ.get('INTERNAL_API_KEY', '')
 
 
 # ---------------------------------------------------------------------------
@@ -97,10 +55,10 @@ def log_audit_trail(
     old_value=None,
     new_value=None,
     changes=None,
-    **kwargs,          # absorb any extra keyword args from future call sites
+    **kwargs,  # absorb any extra keyword args from future call sites
 ):
     """
-    Write one audit-trail record.
+    Send one audit-trail record to the EchoTrace microservice via HTTP.
 
     Parameters
     ----------
@@ -115,36 +73,61 @@ def log_audit_trail(
     new_value     : dict  — state after the change (optional)
     changes       : dict  — field-level diff (optional)
     """
-    def _serialise(obj):
-        if obj is None:
-            return None
-        try:
-            return json.dumps(obj, default=str)
-        except Exception:
-            return str(obj)
-
-    session = _Session()
     try:
-        record = AuditLog(
-            timestamp     = datetime.datetime.utcnow(),
-            user_id       = user_id,
-            username      = username,
-            action        = action,
-            entity_type   = entity_type,
-            entity_id     = entity_id,
-            entity_name   = entity_name,
-            source_system = source_system,
-            old_value     = _serialise(old_value),
-            new_value     = _serialise(new_value),
-            changes       = _serialise(changes),
+        import requests  # lazy import to avoid hard dependency at module load
+
+        payload = {
+            'user_id': user_id if user_id is not None else 0,
+            'username': username or 'system',
+            'action': action,
+            'entity_type': entity_type,
+            'entity_id': str(entity_id) if entity_id is not None else '0',
+            'source_system': source_system or 'unknown',
+        }
+        if entity_name is not None:
+            payload['entity_name'] = entity_name
+        if old_value is not None:
+            payload['old_value'] = (
+                json.dumps(old_value, default=str)
+                if not isinstance(old_value, str)
+                else old_value
+            )
+        if new_value is not None:
+            payload['new_value'] = (
+                json.dumps(new_value, default=str)
+                if not isinstance(new_value, str)
+                else new_value
+            )
+        if changes is not None:
+            payload['changes'] = (
+                json.dumps(changes, default=str)
+                if not isinstance(changes, str)
+                else changes
+            )
+
+        base_url = _get_echotrace_url()
+        api_key = _get_api_key()
+        headers = {
+            'Content-Type': 'application/json',
+            'X-API-Key': api_key,
+        }
+
+        response = requests.post(
+            f"{base_url}/api/v1/audit-trail",
+            json=payload,
+            headers=headers,
+            timeout=3,
         )
-        session.add(record)
-        session.commit()
+
+        if response.status_code not in (200, 201):
+            logger.warning(
+                "EchoTrace audit POST returned %s: %s",
+                response.status_code, response.text[:200]
+            )
+
     except Exception as exc:
-        session.rollback()
-        logger.warning("echotrace: failed to write audit record: %s", exc)
-    finally:
-        session.close()
+        # Audit logging must never crash the calling service
+        logger.warning("echotrace: failed to send audit record: %s", exc)
 
 
 def get_audit_trail(
@@ -154,19 +137,40 @@ def get_audit_trail(
     limit=200,
 ):
     """
-    Query audit records.  All filters are optional.
-    Returns a list of dicts, newest first.
+    Query audit records from the EchoTrace microservice.
+    All filters are optional.  Returns a list of dicts, newest first.
     """
-    session = _Session()
     try:
-        q = session.query(AuditLog)
+        import requests  # lazy import
+
+        params = {'limit': limit, 'order_direction': 'desc'}
         if entity_type:
-            q = q.filter(AuditLog.entity_type == entity_type)
+            params['entity_type'] = entity_type
         if entity_id is not None:
-            q = q.filter(AuditLog.entity_id == entity_id)
+            params['entity_id'] = str(entity_id)
         if source_system:
-            q = q.filter(AuditLog.source_system == source_system)
-        records = q.order_by(AuditLog.id.desc()).limit(limit).all()
-        return [r.to_dict() for r in records]
-    finally:
-        session.close()
+            params['source_system'] = source_system
+
+        base_url = _get_echotrace_url()
+        response = requests.get(
+            f"{base_url}/api/v1/audit-trail/search",
+            params=params,
+            timeout=5,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            # The search endpoint returns {'results': [...], 'total': N}
+            if isinstance(data, dict) and 'results' in data:
+                return data['results']
+            if isinstance(data, list):
+                return data
+        else:
+            logger.warning(
+                "EchoTrace audit GET returned %s: %s",
+                response.status_code, response.text[:200]
+            )
+    except Exception as exc:
+        logger.warning("echotrace: failed to retrieve audit records: %s", exc)
+
+    return []
